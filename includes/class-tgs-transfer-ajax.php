@@ -1,4 +1,5 @@
 <?php
+
 /**
  * TGS Transfer AJAX Handler
  *
@@ -285,7 +286,6 @@ class TGS_Transfer_Ajax
                             'ledger_code' => $child_ledger->local_ledger_code ?? ''
                         ]);
                     }
-
                 } else {
                     // ========== KHÔNG TRỪ TỒN KHO KHI DUYỆT PHIẾU XUẤT TRANSFER ==========
                     // Theo yêu cầu fileyeucauthuy5: Đã trừ ngay khi tạo phiếu rồi
@@ -336,9 +336,8 @@ class TGS_Transfer_Ajax
             wp_send_json_success([
                 'message' => $success_message
             ]);
-
         } catch (Exception $e) {
-            
+
             $wpdb->query('ROLLBACK');
             wp_send_json_error(['message' => $e->getMessage()]);
         }
@@ -932,7 +931,6 @@ class TGS_Transfer_Ajax
                 'total_max' => $total_max_qty,
                 'redirect_url' => admin_url('admin.php?page=tgs-shop-management&view=' . $config['redirect_view'] . '&id=' . $parent_ledger_id)
             ]);
-
         } catch (Exception $e) {
             $wpdb->query('ROLLBACK');
             wp_send_json_error(['message' => $e->getMessage()]);
@@ -1052,7 +1050,7 @@ class TGS_Transfer_Ajax
         // Xác định có phải nhập 1 phần không bằng cách so sánh với phiếu xuất gốc
         $is_partial = false;
         $all_source_lot_ids_for_partial = []; // Lưu để dùng cho việc cập nhật lot status = 5
-        
+
         if ($local_transfer) {
             $source_blog_id = intval($local_transfer->source_blog_id);
             $source_ledger_id = intval($local_transfer->source_ledger_id);
@@ -1109,8 +1107,8 @@ class TGS_Transfer_Ajax
             // So sánh - là partial nếu:
             // 1. Tổng quantity nhập < tổng quantity xuất, HOẶC
             // 2. Số lượng lot nhập < số lượng lot xuất (cho tracking products)
-            $is_partial = ($imported_total < floatval($source_total)) || 
-                          (count($imported_lot_ids_for_partial) < count($all_source_lot_ids_for_partial));
+            $is_partial = ($imported_total < floatval($source_total)) ||
+                (count($imported_lot_ids_for_partial) < count($all_source_lot_ids_for_partial));
         }
 
         $wpdb->query('START TRANSACTION');
@@ -1161,7 +1159,6 @@ class TGS_Transfer_Ajax
                             'ledger_code' => $child_ledger->local_ledger_code ?? ''
                         ]);
                     }
-
                 } else {
                     // Cộng tồn kho không tracking
                     $quantity = floatval($item->quantity);
@@ -1280,7 +1277,6 @@ class TGS_Transfer_Ajax
                 'is_partial' => $is_partial,
                 'transfer_status' => $final_transfer_status
             ]);
-
         } catch (Exception $e) {
             $wpdb->query('ROLLBACK');
             wp_send_json_error(['message' => $e->getMessage()]);
@@ -2027,7 +2023,7 @@ class TGS_Transfer_Ajax
         }
 
         // Sort by created_at
-        usort($recent, function($a, $b) {
+        usort($recent, function ($a, $b) {
             return strtotime($b['created_at']) - strtotime($a['created_at']);
         });
 
@@ -2081,14 +2077,6 @@ class TGS_Transfer_Ajax
             return $existing->local_product_name_id;
         }
 
-        // Đồng bộ danh mục nếu có
-        $local_cat_id = null;
-        if (!empty($source_product->local_product_cat_id)) {
-            $local_cat_id = self::sync_category_from_source(
-                $source_product->local_product_cat_id,
-                $source_blog_id
-            );
-        }
 
         // Tạo sản phẩm mới - chỉ sử dụng các cột có trong schema gốc
         // Các field phụ (sku, weight, unit, brand, origin, gallery) được lưu trong local_product_meta
@@ -2101,14 +2089,6 @@ class TGS_Transfer_Ajax
             $meta_array = [];
         }
 
-        // Thêm các field phụ vào meta nếu có
-        if (!empty($source_product->local_product_unit)) {
-            $meta_array['unit'] = $source_product->local_product_unit;
-        }
-        if (isset($source_product->local_product_price_in)) {
-            $meta_array['price_in'] = $source_product->local_product_price_in;
-        }
-
         $wpdb->insert($products_table, [
             'source_blog_id' => $source_blog_id,
             'local_product_barcode_main' => $source_product->local_product_barcode_main,
@@ -2116,7 +2096,6 @@ class TGS_Transfer_Ajax
             'local_product_name' => $source_product->local_product_name,
             'global_product_name' => $source_product->global_product_name ?? '',
             'local_product_price' => $source_product->local_product_price ?? 0,
-            'local_product_cat_id' => $local_cat_id,
             'local_product_is_tracking' => $source_product->local_product_is_tracking ?? 0,
             'local_product_quantity_no_tracking' => 0, // Mới tạo, chưa có tồn kho
             'local_product_status' => TGS_PRODUCT_STATUS_ACTIVE,
@@ -2129,90 +2108,17 @@ class TGS_Transfer_Ajax
             'user_id' => get_current_user_id(),
             'is_deleted' => 0,
             'created_at' => current_time('mysql'),
-            'updated_at' => current_time('mysql')
+            'updated_at' => current_time('mysql'),
+            'local_product_price_after_tax' => $source_product->local_product_price_after_tax ?? 0,
+            'local_product_sku' => $source_product->local_product_sku ?? '',
+            'local_product_category_path' => $source_product->local_product_category_path ?? '',
+            'local_product_warehouse_htsoft' => $source_product->local_product_warehouse_htsoft ?? '',
         ]);
 
         return $wpdb->insert_id ?: false;
     }
 
-    /**
-     * Đồng bộ danh mục từ shop nguồn sang shop hiện tại (đệ quy)
-     *
-     * Logic:
-     * - Lấy thông tin danh mục từ shop nguồn
-     * - Nếu có parent thì đệ quy sync parent trước
-     * - Kiểm tra danh mục đã tồn tại ở shop hiện tại chưa (theo tên và parent)
-     * - Nếu chưa có thì tạo mới
-     *
-     * @param int $source_cat_id ID danh mục ở shop nguồn
-     * @param int $source_blog_id Blog ID của shop nguồn
-     * @return int|null ID danh mục ở shop hiện tại hoặc null nếu lỗi
-     */
-    private static function sync_category_from_source($source_cat_id, $source_blog_id)
-    {
-        global $wpdb;
 
-        if (empty($source_cat_id)) {
-            return null;
-        }
-
-        // Lấy thông tin danh mục từ shop nguồn
-        switch_to_blog($source_blog_id);
-
-        $source_cat_table = $wpdb->prefix . 'local_product_cat';
-        $source_cat = $wpdb->get_row($wpdb->prepare("
-            SELECT * FROM {$source_cat_table}
-            WHERE local_product_cat_id = %d
-            AND (is_deleted IS NULL OR is_deleted = 0)
-        ", $source_cat_id));
-
-        restore_current_blog();
-
-        if (!$source_cat) {
-            return null;
-        }
-
-        // Đệ quy sync danh mục cha trước (nếu có)
-        $local_parent_id = null;
-        if (!empty($source_cat->local_cat_parent_id)) {
-            $local_parent_id = self::sync_category_from_source(
-                $source_cat->local_cat_parent_id,
-                $source_blog_id
-            );
-        }
-
-        // Kiểm tra danh mục đã tồn tại ở shop hiện tại chưa
-        $cat_table = $wpdb->prefix . 'local_product_cat';
-
-        // Tìm theo tên + parent_id để đảm bảo đúng vị trí trong cây
-        $existing = $wpdb->get_row($wpdb->prepare("
-            SELECT local_product_cat_id FROM {$cat_table}
-            WHERE local_product_cat_name = %s
-            AND (local_cat_parent_id = %d OR (local_cat_parent_id IS NULL AND %d = 0))
-            AND (is_deleted IS NULL OR is_deleted = 0)
-        ", $source_cat->local_product_cat_name, $local_parent_id ?? 0, $local_parent_id ?? 0));
-
-        if ($existing) {
-            return $existing->local_product_cat_id;
-        }
-
-        // Tạo danh mục mới - chỉ sử dụng các cột có trong schema gốc
-        // Schema gốc: local_product_cat_id, global_product_cat_id, local_cat_parent_id,
-        //             local_product_cat_name, global_product_cat_name, local_product_cat_status,
-        //             user_id, is_deleted, deleted_at, created_at, updated_at
-        $wpdb->insert($cat_table, [
-            'local_product_cat_name' => $source_cat->local_product_cat_name,
-            'local_cat_parent_id' => $local_parent_id,
-            'local_product_cat_status' => $source_cat->local_product_cat_status ?? 1,
-            'global_product_cat_name' => $source_cat->global_product_cat_name ?? $source_cat->local_product_cat_name,
-            'user_id' => get_current_user_id(),
-            'is_deleted' => 0,
-            'created_at' => current_time('mysql'),
-            'updated_at' => current_time('mysql')
-        ]);
-
-        return $wpdb->insert_id ?: null;
-    }
 
     /**
      * Từ chối phiếu xuất sang shop con
@@ -2304,7 +2210,6 @@ class TGS_Transfer_Ajax
                             'updated_at' => current_time('mysql')
                         ], ['global_product_lot_id' => $lot_id]);
                     }
-
                 } else {
                     // Cộng lại tồn kho không tracking
                     $quantity = floatval($item->quantity);
@@ -2353,7 +2258,6 @@ class TGS_Transfer_Ajax
                 'message' => 'Từ chối phiếu bán nội bộ thành công! Hàng đã nhập kho lại.',
                 'reason' => $reason
             ]);
-
         } catch (Exception $e) {
             $wpdb->query('ROLLBACK');
             wp_send_json_error(['message' => $e->getMessage()]);
@@ -2459,7 +2363,6 @@ class TGS_Transfer_Ajax
                             'updated_at' => current_time('mysql')
                         ], ['global_product_lot_id' => $lot_id]);
                     }
-
                 } else {
                     // Không cộng/trừ tồn kho vì chưa nhập
                     // Không cần xử lý gì
@@ -2585,7 +2488,6 @@ class TGS_Transfer_Ajax
                 'message' => 'Từ chối phiếu mua thành công! Hàng sẽ chờ trả về shop bán.',
                 'reason' => $reason
             ]);
-
         } catch (Exception $e) {
             $wpdb->query('ROLLBACK');
             wp_send_json_error(['message' => $e->getMessage()]);
@@ -2773,7 +2675,6 @@ class TGS_Transfer_Ajax
             wp_send_json_success([
                 'message' => 'Duyệt phiếu trả nội bộ thành công! Shop đích có thể tạo phiếu nhận trả.'
             ]);
-
         } catch (Exception $e) {
             $wpdb->query('ROLLBACK');
             wp_send_json_error(['message' => $e->getMessage()]);
