@@ -245,7 +245,7 @@ jQuery(document).ready(function($) {
                         <div>
                             <strong>${escapeHtml(item.product_name)}</strong>
                             <br>
-                            <small class="text-muted">Barcode: ${escapeHtml(item.barcode_main || item.barcode)}</small>
+                            <small class="text-muted">SKU: ${escapeHtml(item.sku || '')}</small>
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-3">

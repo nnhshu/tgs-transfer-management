@@ -332,11 +332,11 @@ jQuery(document).ready(function($) {
     let productsData = [];
 
     // Lưu trữ dữ liệu nhập cho từng sản phẩm
-    // Key = barcode, Value = { quantity, selectedLots: [] }
+    // Key = sku, Value = { quantity, selectedLots: [] }
     let importData = {};
 
     // Modal state
-    let currentModalBarcode = null;
+    let currentModalSku = null;
     let currentModalLots = [];
     // lotConditions: { lot_id: { condition: 0|1, scanned: true|false } }
     let lotConditions = {};
@@ -374,14 +374,14 @@ jQuery(document).ready(function($) {
 
                     // Initialize import data - LUÔN lấy full (không có nhập 1 phần)
                     productsData.forEach(function(item) {
-                        const barcode = item.barcode_main || item.barcode;
+                        const sku = item.sku || '';
                         const isTracking = item.is_tracking == 1;
                         const maxQty = parseInt(item.quantity) || 0;
 
                         if (isTracking) {
                             let lotsDetail = item.lots_detail || [];
                             // Luôn chọn tất cả lots
-                            importData[barcode] = {
+                            importData[sku] = {
                                 isTracking: true,
                                 maxQuantity: maxQty,
                                 allLots: lotsDetail,
@@ -399,7 +399,7 @@ jQuery(document).ready(function($) {
                             });
                         } else {
                             // Không tracking - luôn full quantity
-                            importData[barcode] = {
+                            importData[sku] = {
                                 isTracking: false,
                                 maxQuantity: maxQty,
                                 allLots: [],
@@ -452,10 +452,10 @@ jQuery(document).ready(function($) {
         let needsSync = 0;
 
         productsData.forEach(function(item, index) {
-            const barcode = item.barcode_main || item.barcode;
+            const sku = item.sku || '';
             const isTracking = item.is_tracking == 1;
             const maxQty = parseInt(item.quantity) || 0;
-            const data = importData[barcode] || {};
+            const data = importData[sku] || {};
             const importQty = data.quantity || 0;
 
             // Lấy thông tin giá/thuế từ item (từ local_ledger_item)
@@ -481,7 +481,7 @@ jQuery(document).ready(function($) {
                 const totalCount = (data.allLots || []).length;
                 lotColumn = `
                     <button type="button" class="btn btn-sm btn-outline-primary btn-select-lots"
-                            data-barcode="${escapeHtml(barcode)}"
+                            data-sku="${escapeHtml(sku)}"
                             data-product-name="${escapeHtml(item.product_name)}">
                         <i class="bx bx-check-shield"></i> Kiểm ${totalCount} mã
                     </button>
@@ -497,7 +497,7 @@ jQuery(document).ready(function($) {
             const itemStatus = '<span class="badge bg-success">Nhập hết</span>';
 
             html += `
-                <tr data-barcode="${escapeHtml(barcode)}" data-max="${maxQty}" data-tracking="${isTracking ? 1 : 0}"
+                <tr data-sku="${escapeHtml(sku)}" data-max="${maxQty}" data-tracking="${isTracking ? 1 : 0}"
                     data-price="${price}" data-tax-percent="${taxPercent}" data-discount-percent="${discountPercent}"
                     data-subtotal-no-vat="${subtotalNoVat}" data-tax-amount="${taxAmount}" data-subtotal="${subtotal}">
                     <td>${index + 1}</td>
@@ -505,7 +505,7 @@ jQuery(document).ready(function($) {
                         <strong>${escapeHtml(item.product_name)}</strong>
                         ${isTracking ? '<br><span class="badge bg-info badge-sm">Theo HSD</span>' : ''}
                     </td>
-                    <td><code>${escapeHtml(barcode)}</code></td>
+                    <td><code>${escapeHtml(sku)}</code></td>
                     <td class="text-center"><strong>${maxQty}</strong></td>
                     <td class="text-center">${lotColumn}</td>
                     <td class="text-center">${qtyColumn}</td>
@@ -540,9 +540,9 @@ jQuery(document).ready(function($) {
         let totalAmount = 0;
 
         productsData.forEach(function(item) {
-            const barcode = item.barcode_main || item.barcode;
+            const sku = item.sku || '';
             const maxQty = parseInt(item.quantity) || 0;
-            const data = importData[barcode] || {};
+            const data = importData[sku] || {};
             const importQty = data.quantity || 0;
 
             const price = parseFloat(item.price) || 0;
@@ -580,19 +580,19 @@ jQuery(document).ready(function($) {
 
     // LOT MODAL
     $(document).on('click', '.btn-select-lots', function() {
-        const barcode = $(this).data('barcode');
+        const sku = $(this).data('sku');
         const productName = $(this).data('product-name');
-        const data = importData[barcode];
+        const data = importData[sku];
 
         if (!data) return;
 
         // Set modal state
-        currentModalBarcode = barcode;
+        currentModalSku = sku;
         currentModalLots = data.allLots || [];
 
         // Update modal UI
         $('#modalProductName').text(productName);
-        $('#modalProductBarcode').text(barcode);
+        $('#modalProductBarcode').text(sku);
         $('#scanLotInput').val('');
         $('#scanResult').html('');
 
@@ -858,7 +858,7 @@ jQuery(document).ready(function($) {
                 btn.prop('disabled', false).text('Lưu');
                 if (response.success) {
                     // Cập nhật button trên bảng chính
-                    $(`.btn-select-lots[data-barcode="${currentModalBarcode}"]`)
+                    $(`.btn-select-lots[data-sku="${currentModalSku}"]`)
                         .removeClass('btn-outline-primary').addClass('btn-success').text('Đã kiểm');
 
                     // Đóng modal
@@ -883,13 +883,13 @@ jQuery(document).ready(function($) {
     function buildItemsData() {
         const items = [];
         productsData.forEach(function(item) {
-            const barcode = item.barcode_main || item.barcode;
-            const data = importData[barcode];
+            const sku = item.sku || '';
+            const data = importData[sku];
 
             if (!data || data.quantity <= 0) return;
 
             items.push({
-                barcode: barcode,
+                sku: sku,
                 max_quantity: data.maxQuantity,
                 import_quantity: data.quantity,
                 is_tracking: data.isTracking,

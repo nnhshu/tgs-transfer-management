@@ -577,19 +577,19 @@ class TGS_Transfer_Ajax
             }
         }
 
-        // Build lookup maps: barcode => import_quantity và barcode => selected_lots
+        // Build lookup maps: sku => import_quantity và sku => selected_lots
         $import_quantities = [];
         $selected_lots_map = [];
         $item_notes_map = [];
         foreach ($custom_items as $ci) {
-            if (isset($ci['barcode']) && isset($ci['import_quantity'])) {
-                $import_quantities[$ci['barcode']] = intval($ci['import_quantity']);
+            if (isset($ci['sku']) && isset($ci['import_quantity'])) {
+                $import_quantities[$ci['sku']] = intval($ci['import_quantity']);
             }
-            if (isset($ci['barcode']) && isset($ci['selected_lots']) && is_array($ci['selected_lots'])) {
-                $selected_lots_map[$ci['barcode']] = $ci['selected_lots'];
+            if (isset($ci['sku']) && isset($ci['selected_lots']) && is_array($ci['selected_lots'])) {
+                $selected_lots_map[$ci['sku']] = $ci['selected_lots'];
             }
-            if (isset($ci['barcode']) && isset($ci['item_note'])) {
-                $item_notes_map[$ci['barcode']] = sanitize_textarea_field($ci['item_note']);
+            if (isset($ci['sku']) && isset($ci['item_note'])) {
+                $item_notes_map[$ci['sku']] = sanitize_textarea_field($ci['item_note']);
             }
         }
 
