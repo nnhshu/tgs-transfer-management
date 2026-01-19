@@ -2115,6 +2115,7 @@ class TGS_Transfer_Ajax
             'updated_at' => current_time('mysql'),
             'local_product_price_after_tax' => $source_product->local_product_price_after_tax ?? 0,
             'local_product_sku' => $source_product->local_product_sku ?? '',
+            'local_product_unit' => $source_product->local_product_unit ?? '',
             'local_product_category_path' => $source_product->local_product_category_path ?? '',
             'local_product_warehouse_htsoft' => $source_product->local_product_warehouse_htsoft ?? '',
         ]);
