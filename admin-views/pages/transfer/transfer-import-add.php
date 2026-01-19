@@ -503,6 +503,7 @@ jQuery(document).ready(function($) {
                     <td>${index + 1}</td>
                     <td>
                         <strong>${escapeHtml(item.product_name)}</strong>
+                        <br><small class="text-muted">Barcode: ${escapeHtml(item.barcode || '—')}</small>
                         ${isTracking ? '<br><span class="badge bg-info badge-sm">Theo HSD</span>' : ''}
                     </td>
                     <td><code>${escapeHtml(sku)}</code></td>

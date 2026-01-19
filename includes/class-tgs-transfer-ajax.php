@@ -1494,6 +1494,7 @@ class TGS_Transfer_Ajax
                 $items = $wpdb->get_results("
                     SELECT li.*, p.local_product_name as product_name,
                            p.local_product_sku as sku,
+                           p.local_product_barcode_main as barcode,
                            p.local_product_is_tracking as is_tracking
                     FROM {$ledger_item_table} li
                     JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
