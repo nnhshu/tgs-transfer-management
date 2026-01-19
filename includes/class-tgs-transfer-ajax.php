@@ -121,12 +121,12 @@ class TGS_Transfer_Ajax
         global $wpdb;
         $current_blog_id = get_current_blog_id();
 
-        // Lấy barcode của các sản phẩm hiện tại
+        // Lấy SKU của các sản phẩm hiện tại
         $products_table = $wpdb->prefix . 'local_product_name';
         $placeholders = implode(',', array_fill(0, count($product_ids), '%d'));
 
         $products = $wpdb->get_results($wpdb->prepare("
-            SELECT local_product_name_id as id, local_product_barcode_main as barcode
+            SELECT local_product_name_id as id, local_product_sku as sku
             FROM {$products_table}
             WHERE local_product_name_id IN ({$placeholders})
         ", ...$product_ids));
@@ -140,18 +140,18 @@ class TGS_Transfer_Ajax
         $dest_products_table = $wpdb->prefix . 'local_product_name';
 
         foreach ($products as $product) {
-            if (empty($product->barcode)) {
+            if (empty($product->sku)) {
                 $need_sync[] = $product->id;
                 continue;
             }
 
-            // Kiểm tra barcode có tồn tại ở shop đích không
+            // Kiểm tra SKU có tồn tại ở shop đích không
             $exists = $wpdb->get_var($wpdb->prepare("
                 SELECT COUNT(*)
                 FROM {$dest_products_table}
-                WHERE local_product_barcode_main = %s
+                WHERE local_product_sku = %s
                 AND (is_deleted IS NULL OR is_deleted = 0)
-            ", $product->barcode));
+            ", $product->sku));
 
             if ($exists > 0) {
                 $synced[] = $product->id;
@@ -244,7 +244,7 @@ class TGS_Transfer_Ajax
 
         // Lấy các item từ phiếu con xuất kho
         $items = $wpdb->get_results($wpdb->prepare("
-            SELECT li.*, p.local_product_name, p.local_product_barcode_main, p.local_product_is_tracking
+            SELECT li.*, p.local_product_name, p.local_product_sku, p.local_product_is_tracking
             FROM {$ledger_item_table} li
             JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
             WHERE li.local_ledger_id = %d
@@ -347,7 +347,7 @@ class TGS_Transfer_Ajax
      * Đồng bộ sản phẩm từ shop nguồn sang shop đích
      * Wrapper function - gọi sync_product_from_source sau khi switch_to_blog
      *
-     * @param object $item Thông tin item (chứa local_product_name_id, local_product_barcode_main)
+     * @param object $item Thông tin item (chứa local_product_name_id, local_product_sku)
      * @param int $destination_blog_id Blog ID của shop đích
      * @param int $source_blog_id Blog ID của shop nguồn
      */
@@ -355,10 +355,10 @@ class TGS_Transfer_Ajax
     {
         global $wpdb;
 
-        $barcode = $item->local_product_barcode_main;
+        $sku = $item->local_product_sku ?? '';
 
-        if (empty($barcode)) {
-            return; // Không thể đồng bộ nếu không có barcode
+        if (empty($sku)) {
+            return; // Không thể đồng bộ nếu không có SKU
         }
 
         // Chuyển sang shop đích để kiểm tra sản phẩm đã tồn tại chưa
@@ -366,13 +366,13 @@ class TGS_Transfer_Ajax
 
         $dest_products_table = $wpdb->prefix . 'local_product_name';
 
-        // Kiểm tra sản phẩm đã tồn tại chưa
+        // Kiểm tra sản phẩm đã tồn tại chưa (theo SKU)
         $exists = $wpdb->get_var($wpdb->prepare("
             SELECT local_product_name_id
             FROM {$dest_products_table}
-            WHERE local_product_barcode_main = %s
+            WHERE local_product_sku = %s
             AND (is_deleted IS NULL OR is_deleted = 0)
-        ", $barcode));
+        ", $sku));
 
         if ($exists) {
             restore_current_blog();
@@ -697,12 +697,12 @@ class TGS_Transfer_Ajax
             $total_import_qty = 0;
 
             foreach ($source_items as $source_item) {
-                $barcode = $source_item->local_product_barcode_main;
+                $sku = $source_item->local_product_sku ?? '';
                 $is_tracking = intval($source_item->local_product_is_tracking) === 1;
                 $max_quantity = intval($source_item->quantity);
 
-                $import_quantity = isset($import_quantities[$barcode])
-                    ? intval($import_quantities[$barcode])
+                $import_quantity = isset($import_quantities[$sku])
+                    ? intval($import_quantities[$sku])
                     : $max_quantity;
 
                 // Xử lý lot_ids cho tracking products
@@ -710,9 +710,9 @@ class TGS_Transfer_Ajax
                 if ($is_tracking && !empty($source_item->list_product_lots)) {
                     $all_lot_ids = json_decode($source_item->list_product_lots, true) ?: [];
 
-                    if (isset($selected_lots_map[$barcode]) && !empty($selected_lots_map[$barcode])) {
+                    if (isset($selected_lots_map[$sku]) && !empty($selected_lots_map[$sku])) {
                         $lot_ids_to_import = array_values(array_intersect(
-                            $selected_lots_map[$barcode],
+                            $selected_lots_map[$sku],
                             $all_lot_ids
                         ));
                         $import_quantity = count($lot_ids_to_import);
@@ -741,17 +741,17 @@ class TGS_Transfer_Ajax
                     continue;
                 }
 
-                // Tìm hoặc tạo sản phẩm ở shop hiện tại
+                // Tìm hoặc tạo sản phẩm ở shop hiện tại (theo SKU)
                 $local_product = $wpdb->get_row($wpdb->prepare("
                     SELECT * FROM {$products_table}
-                    WHERE local_product_barcode_main = %s
+                    WHERE local_product_sku = %s
                     AND (is_deleted IS NULL OR is_deleted = 0)
-                ", $barcode));
+                ", $sku));
 
                 if (!$local_product) {
                     $new_product_id = self::sync_product_from_source($source_item, $source_blog_id);
                     if (!$new_product_id) {
-                        throw new Exception("Lỗi tạo sản phẩm mới với barcode '{$barcode}'");
+                        throw new Exception("Lỗi tạo sản phẩm mới với SKU '{$sku}'");
                     }
                     $local_product = $wpdb->get_row($wpdb->prepare("
                         SELECT * FROM {$products_table}
@@ -771,7 +771,7 @@ class TGS_Transfer_Ajax
 
                 $total_amount += $subtotal;
 
-                $item_note = $item_notes_map[$barcode] ?? ($source_item->local_ledger_item_note ?? '');
+                $item_note = $item_notes_map[$sku] ?? ($source_item->local_ledger_item_note ?? '');
 
                 $import_items_data[] = [
                     'product_id' => $local_product->local_product_name_id,
@@ -1371,7 +1371,7 @@ class TGS_Transfer_Ajax
 
         // Lấy các item
         $items = $wpdb->get_results($wpdb->prepare("
-            SELECT li.*, p.local_product_name, p.local_product_barcode_main, p.local_product_is_tracking
+            SELECT li.*, p.local_product_name, p.local_product_sku, p.local_product_is_tracking
             FROM {$ledger_item_table} li
             JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
             WHERE li.local_ledger_id = %d
@@ -1493,7 +1493,7 @@ class TGS_Transfer_Ajax
                 $item_ids_str = implode(',', array_map('intval', $item_ids));
                 $items = $wpdb->get_results("
                     SELECT li.*, p.local_product_name as product_name,
-                           p.local_product_barcode_main as barcode_main,
+                           p.local_product_sku as sku,
                            p.local_product_is_tracking as is_tracking
                     FROM {$ledger_item_table} li
                     JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
@@ -1505,16 +1505,16 @@ class TGS_Transfer_Ajax
 
         restore_current_blog();
 
-        // Step 3: Kiểm tra sync status cho từng sản phẩm ở shop đích (shop con)
+        // Step 3: Kiểm tra sync status cho từng sản phẩm ở shop đích (shop con) theo SKU
         switch_to_blog($destination_blog_id);
         $dest_products_table = $wpdb->prefix . 'local_product_name';
 
         foreach ($items as &$item) {
             $exists = $wpdb->get_var($wpdb->prepare("
                 SELECT COUNT(*) FROM {$dest_products_table}
-                WHERE local_product_barcode_main = %s
+                WHERE local_product_sku = %s
                 AND (is_deleted IS NULL OR is_deleted = 0)
-            ", $item->barcode_main));
+            ", $item->sku));
 
             $item->synced_in_destination = ($exists > 0);
         }
@@ -1611,7 +1611,7 @@ class TGS_Transfer_Ajax
                 $items = $wpdb->get_results("
                     SELECT li.*,
                            p.local_product_name as product_name,
-                           p.local_product_barcode_main as barcode_main,
+                           p.local_product_sku as sku,
                            p.local_product_is_tracking as is_tracking
                     FROM {$ledger_item_table} li
                     JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
@@ -2066,15 +2066,19 @@ class TGS_Transfer_Ajax
 
         $products_table = $wpdb->prefix . 'local_product_name';
 
-        // Kiểm tra sản phẩm đã tồn tại chưa (theo barcode)
-        $existing = $wpdb->get_row($wpdb->prepare("
-            SELECT local_product_name_id FROM {$products_table}
-            WHERE local_product_barcode_main = %s
-            AND (is_deleted IS NULL OR is_deleted = 0)
-        ", $source_product->local_product_barcode_main));
+        // Kiểm tra sản phẩm đã tồn tại chưa (theo SKU - ưu tiên hơn barcode)
+        $source_sku = $source_product->local_product_sku ?? '';
 
-        if ($existing) {
-            return $existing->local_product_name_id;
+        if (!empty($source_sku)) {
+            $existing = $wpdb->get_row($wpdb->prepare("
+                SELECT local_product_name_id FROM {$products_table}
+                WHERE local_product_sku = %s
+                AND (is_deleted IS NULL OR is_deleted = 0)
+            ", $source_sku));
+
+            if ($existing) {
+                return $existing->local_product_name_id;
+            }
         }
 
 
