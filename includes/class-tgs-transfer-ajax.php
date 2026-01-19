@@ -266,7 +266,7 @@ class TGS_Transfer_Ajax
                         $previous_status = $current_lot ? $current_lot->local_product_lot_is_active : TGS_PRODUCT_LOT_PENDING;
 
                         // Tự động điền local_product_barcode_main nếu chưa có
-                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main($lot_id, $item->local_product_name_id);
+                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main_and_sku($lot_id, $item->local_product_name_id);
 
                         $wpdb->update($lots_table, [
                             'source_blog_id' => $current_blog_id, // Shop mẹ xuất đi
@@ -1124,7 +1124,7 @@ class TGS_Transfer_Ajax
 
                     foreach ($lot_ids as $lot_id) {
                         // Tự động điền local_product_barcode_main nếu chưa có
-                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main($lot_id, $item->local_product_name_id);
+                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main_and_sku($lot_id, $item->local_product_name_id);
 
                         // Lấy thông tin condition của lot để xác định status
                         $lot_condition = $wpdb->get_var($wpdb->prepare(
@@ -1231,7 +1231,7 @@ class TGS_Transfer_Ajax
                 if (!empty($not_imported_lot_ids)) {
                     foreach ($not_imported_lot_ids as $lot_id) {
                         // Tự động điền local_product_barcode_main nếu chưa có
-                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main($lot_id);
+                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main_and_sku($lot_id);
 
                         $wpdb->update($lots_table, [
                             'local_product_lot_is_active' => TGS_PRODUCT_LOT_PENDING_RETURN, // Chờ xử lý trả về shop mẹ
@@ -2204,7 +2204,7 @@ class TGS_Transfer_Ajax
 
                     foreach ($lot_ids as $lot_id) {
                         // Tự động điền local_product_barcode_main nếu chưa có
-                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main($lot_id, $item->local_product_name_id);
+                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main_and_sku($lot_id, $item->local_product_name_id);
 
                         // Khi từ chối xuất: lot về lại shop mẹ
                         // to_blog_id giữ nguyên = shop mẹ (current_blog_id)
@@ -2356,7 +2356,7 @@ class TGS_Transfer_Ajax
 
                     foreach ($lot_ids as $lot_id) {
                         // Tự động điền local_product_barcode_main nếu chưa có
-                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main($lot_id, $item->local_product_name_id);
+                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main_and_sku($lot_id, $item->local_product_name_id);
 
                         // Khi shop con từ chối nhận:
                         // source_blog_id: giữ nguyên (shop mẹ)
@@ -2428,7 +2428,7 @@ class TGS_Transfer_Ajax
                 if (!empty($not_selected_lot_ids)) {
                     foreach ($not_selected_lot_ids as $lot_id) {
                         // Tự động điền local_product_barcode_main nếu chưa có
-                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main($lot_id);
+                        TGS_Global_Lots_Helper::ensure_lot_has_barcode_main_and_sku($lot_id);
 
                         $wpdb->update($lots_table, [
                             'local_product_lot_is_active' => TGS_PRODUCT_LOT_PENDING_RETURN, // Chờ trả mẹ
