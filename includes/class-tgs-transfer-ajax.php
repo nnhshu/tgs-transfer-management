@@ -764,10 +764,10 @@ class TGS_Transfer_Ajax
                 $discount_percent = floatval($source_item->local_ledger_item_discount ?? 0);
 
                 $subtotal_no_vat = $import_quantity * $price;
-                $discount_amount = $subtotal_no_vat * ($discount_percent / 100);
+                $discount_amount = round($subtotal_no_vat * ($discount_percent / 100));
                 $after_discount = $subtotal_no_vat - $discount_amount;
-                $tax_amount = $after_discount * ($tax_percent / 100);
-                $subtotal = $after_discount + $tax_amount;
+                $tax_amount = round($after_discount * ($tax_percent / 100));
+                $subtotal = round($after_discount + $tax_amount);
 
                 $total_amount += $subtotal;
 

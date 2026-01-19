@@ -464,12 +464,12 @@ jQuery(document).ready(function($) {
             const discountPercent = parseFloat(item.local_ledger_item_discount) || 0;
             const itemNote = item.local_ledger_item_note || '';
 
-            // Tính toán giống như trang xuất
+            // Tính toán giống như trang xuất (có làm tròn như ticket-create-base.js)
             const subtotalNoVat = importQty * price;
-            const discountAmount = subtotalNoVat * (discountPercent / 100);
+            const discountAmount = Math.round(subtotalNoVat * (discountPercent / 100));
             const afterDiscount = subtotalNoVat - discountAmount;
-            const taxAmount = afterDiscount * (taxPercent / 100);
-            const subtotal = afterDiscount + taxAmount;
+            const taxAmount = Math.round(afterDiscount * (taxPercent / 100));
+            const subtotal = Math.round(afterDiscount + taxAmount);
 
             if (!item.synced_in_destination) {
                 needsSync++;
@@ -550,12 +550,12 @@ jQuery(document).ready(function($) {
             const taxPercent = parseFloat(item.local_ledger_item_tax_percent) || 0;
             const discountPercent = parseFloat(item.local_ledger_item_discount) || 0;
 
-            // Tính toán giống như trang xuất
+            // Tính toán giống như trang xuất (có làm tròn như ticket-create-base.js)
             const subtotalNoVat = importQty * price;
-            const discountAmount = subtotalNoVat * (discountPercent / 100);
+            const discountAmount = Math.round(subtotalNoVat * (discountPercent / 100));
             const afterDiscount = subtotalNoVat - discountAmount;
-            const taxAmount = afterDiscount * (taxPercent / 100);
-            const subtotal = afterDiscount + taxAmount;
+            const taxAmount = Math.round(afterDiscount * (taxPercent / 100));
+            const subtotal = Math.round(afterDiscount + taxAmount);
 
             totalMax += maxQty;
             totalImport += importQty;
