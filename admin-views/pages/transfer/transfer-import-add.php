@@ -126,7 +126,7 @@ if (!$transfer_id) {
                                     <tr>
                                         <th style="width: 3%;">#</th>
                                         <th style="width: 14%;">Sản phẩm</th>
-                                        <th style="width: 8%;">Barcode</th>
+                                        <th style="width: 8%;">SKU</th>
                                         <th style="width: 5%;">SL tối đa</th>
                                         <th style="width: 10%;">Mã định danh</th>
                                         <th style="width: 5%;">SL nhập</th>
@@ -225,7 +225,7 @@ if (!$transfer_id) {
                 <!-- Product info -->
                 <div class="mb-3">
                     <strong id="modalProductName">—</strong>
-                    <small class="text-muted ms-2">Barcode: <code id="modalProductBarcode">—</code></small>
+                    <small class="text-muted ms-2">Mã SKU: <code id="modalProductBarcode">—</code></small>
                 </div>
 
                 <!-- Scan input -->
