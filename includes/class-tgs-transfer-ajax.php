@@ -2119,6 +2119,7 @@ class TGS_Transfer_Ajax
             'local_product_unit' => $source_product->local_product_unit ?? '',
             'local_product_category_path' => $source_product->local_product_category_path ?? '',
             'local_product_warehouse_htsoft' => $source_product->local_product_warehouse_htsoft ?? '',
+            'local_product_list_category_id' => $source_product->local_product_list_category_id ?? null
         ]);
 
         return $wpdb->insert_id ?: false;
