@@ -296,6 +296,24 @@ class TGS_Transfer_Ajax
                 self::sync_product_to_destination($item, $destination_blog_id, $current_blog_id);
             }
 
+            // ========== CẬP NHẬT BATCH_DISTRIBUTION - Transfer Export ==========
+            // Đánh dấu transferred_out tại shop nguồn
+            if (class_exists('TGS_Batch_Distribution')) {
+                $items_with_batch = [];
+                foreach ($items as $item) {
+                    $bid = intval($item->batch_id ?? 0);
+                    if ($bid > 0) {
+                        $items_with_batch[] = [
+                            'batch_id' => $bid,
+                            'quantity' => floatval($item->quantity ?? 0),
+                        ];
+                    }
+                }
+                if (!empty($items_with_batch)) {
+                    TGS_Batch_Distribution::on_transfer_export_approved($current_blog_id, $items_with_batch);
+                }
+            }
+
             // Cập nhật trạng thái phiếu con xuất kho
             $wpdb->update($ledger_table, [
                 'local_ledger_approver_status' => TGS_APPROVER_STATUS_APPROVED,
@@ -1169,6 +1187,24 @@ class TGS_Transfer_Ajax
                             updated_at = %s
                         WHERE local_product_name_id = %d
                     ", $quantity, current_time('mysql'), $item->local_product_name_id));
+                }
+            }
+
+            // ========== CẬP NHẬT BATCH_DISTRIBUTION - Transfer Import ==========
+            // Tăng qty tại shop đích (hàng đã nhận)
+            if (class_exists('TGS_Batch_Distribution')) {
+                $items_with_batch = [];
+                foreach ($items as $item) {
+                    $bid = intval($item->batch_id ?? 0);
+                    if ($bid > 0) {
+                        $items_with_batch[] = [
+                            'batch_id' => $bid,
+                            'quantity' => floatval($item->quantity ?? 0),
+                        ];
+                    }
+                }
+                if (!empty($items_with_batch)) {
+                    TGS_Batch_Distribution::on_transfer_import_approved($current_blog_id, $items_with_batch);
                 }
             }
 
@@ -2588,7 +2624,19 @@ class TGS_Transfer_Ajax
 
     /**
      * Duyệt phiếu trả hàng nội bộ
-     * Tương tự approve_export nhưng cho phiếu trả
+     *
+     * ⚠️ DEPRECATED: Hàm này KHÔNG được JS front-end gọi nữa.
+     * JS (ticket-detail-base.js) đã route phiếu con xuất (type=2) có cha type=14
+     * sang tgs_transfer_approve_export → approve_export(), hàm đã xử lý đầy đủ:
+     *   - Lot tracking (update to_blog_id, status PENDING)
+     *   - Non-tracking stock
+     *   - batch_distribution (transferred_out)
+     *   - Sync sản phẩm sang shop đích
+     *
+     * Hàm approve_return() chỉ cập nhật trạng thái, THIẾU xử lý lots/stock/distribution.
+     * Giữ lại để backward compatible nhưng KHÔNG NÊN GỌI.
+     *
+     * @deprecated Use approve_export() instead (via tgs_transfer_approve_export action)
      */
     public static function approve_return()
     {
