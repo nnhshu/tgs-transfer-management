@@ -299,18 +299,12 @@ class TGS_Transfer_Ajax
             // ========== CẬP NHẬT BATCH_DISTRIBUTION - Transfer Export ==========
             // Đánh dấu transferred_out tại shop nguồn
             if (class_exists('TGS_Batch_Distribution')) {
-                $items_with_batch = [];
-                foreach ($items as $item) {
-                    $bid = intval($item->batch_id ?? 0);
-                    if ($bid > 0) {
-                        $items_with_batch[] = [
-                            'batch_id' => $bid,
-                            'quantity' => floatval($item->quantity ?? 0),
-                        ];
-                    }
-                }
+                $items_with_batch = self::collect_items_with_batch($items);
                 if (!empty($items_with_batch)) {
                     TGS_Batch_Distribution::on_transfer_export_approved($current_blog_id, $items_with_batch);
+
+                    // Ghi batch_movement cho transfer export
+                    self::record_batch_movements($items_with_batch, $current_blog_id, $destination_blog_id, 1, $ledger_id, $current_blog_id);
                 }
             }
 
@@ -359,6 +353,150 @@ class TGS_Transfer_Ajax
             $wpdb->query('ROLLBACK');
             wp_send_json_error(['message' => $e->getMessage()]);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // HELPER: Thu thập items_with_batch (hỗ trợ cả tracking + non-tracking)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Thu thập items_with_batch từ danh sách ledger items.
+     * - Non-tracking: lấy batch_id trực tiếp từ item->batch_id
+     * - Tracking: lấy batch_id từ wp_global_product_lots (mỗi lot có batch_id)
+     *   → group by batch_id, đếm số lots = quantity
+     *
+     * @param array $items Danh sách ledger items (objects từ DB)
+     * @return array [['batch_id' => X, 'quantity' => Y], ...]
+     */
+    private static function collect_items_with_batch($items)
+    {
+        global $wpdb;
+        $result = [];
+        $tracking_lot_ids = [];
+
+        foreach ($items as $item) {
+            $is_tracking = intval($item->local_product_is_tracking ?? 0) === 1;
+            $bid = intval($item->batch_id ?? 0);
+
+            if (!$is_tracking && $bid > 0) {
+                // Non-tracking: dùng batch_id từ ledger item
+                $result[] = [
+                    'batch_id' => $bid,
+                    'quantity' => floatval($item->quantity ?? 0),
+                ];
+            } elseif ($is_tracking) {
+                // Tracking: thu thập lot_ids để query batch_id sau
+                $lot_ids = json_decode($item->list_product_lots ?? '[]', true) ?: [];
+                $tracking_lot_ids = array_merge($tracking_lot_ids, array_map('intval', $lot_ids));
+            }
+        }
+
+        // Query batch_id từ lots cho tracking products
+        $tracking_lot_ids = array_unique(array_filter($tracking_lot_ids));
+        if (!empty($tracking_lot_ids)) {
+            $lots_table = defined('TGS_TABLE_GLOBAL_PRODUCT_LOTS') ? TGS_TABLE_GLOBAL_PRODUCT_LOTS : 'wp_global_product_lots';
+            $placeholders = implode(',', array_fill(0, count($tracking_lot_ids), '%d'));
+            $lot_rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT global_product_lot_id, batch_id FROM {$lots_table} WHERE global_product_lot_id IN ({$placeholders})",
+                ...$tracking_lot_ids
+            ));
+
+            // Group by batch_id → count lots (mỗi lot = 1 unit cho tracking)
+            $batch_count = [];
+            foreach ($lot_rows as $lot) {
+                $lot_bid = intval($lot->batch_id ?? 0);
+                if ($lot_bid > 0) {
+                    if (!isset($batch_count[$lot_bid])) $batch_count[$lot_bid] = 0;
+                    $batch_count[$lot_bid]++;
+                }
+            }
+
+            foreach ($batch_count as $batch_id => $qty) {
+                $result[] = [
+                    'batch_id' => $batch_id,
+                    'quantity' => $qty,
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Ghi batch_movement records cho transfer.
+     *
+     * @param array $items_with_batch [['batch_id' => X, 'quantity' => Y], ...]
+     * @param int   $from_blog_id     Shop nguồn
+     * @param int   $to_blog_id       Shop đích
+     * @param int   $movement_type    1=điều chuyển, 2=trả lại, 3=hủy
+     * @param int   $source_ledger_id Ledger ID tham chiếu
+     * @param int   $source_ledger_blog_id Blog ID của ledger
+     */
+    private static function record_batch_movements($items_with_batch, $from_blog_id, $to_blog_id, $movement_type, $source_ledger_id, $source_ledger_blog_id)
+    {
+        global $wpdb;
+        $table = defined('TGS_TABLE_GLOBAL_BATCH_MOVEMENT') ? TGS_TABLE_GLOBAL_BATCH_MOVEMENT : 'wp_global_batch_movement';
+        $now = current_time('mysql');
+        $user_id = get_current_user_id();
+
+        // Gom theo batch_id trước
+        $batch_qty = [];
+        foreach ($items_with_batch as $item) {
+            $bid = intval($item['batch_id'] ?? 0);
+            if ($bid <= 0) continue;
+            if (!isset($batch_qty[$bid])) $batch_qty[$bid] = 0;
+            $batch_qty[$bid] += floatval($item['quantity'] ?? 0);
+        }
+
+        foreach ($batch_qty as $batch_id => $quantity) {
+            $wpdb->insert($table, [
+                'batch_id' => $batch_id,
+                'from_blog_id' => $from_blog_id ?: null,
+                'to_blog_id' => $to_blog_id ?: null,
+                'quantity' => $quantity,
+                'movement_type' => $movement_type,
+                'source_ledger_id' => $source_ledger_id ?: null,
+                'source_ledger_blog_id' => $source_ledger_blog_id ?: null,
+                'user_id' => $user_id,
+                'is_deleted' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+    }
+
+    /**
+     * Resolve batch_id cho 1 item.
+     * - Non-tracking: lấy từ item->batch_id
+     * - Tracking: lấy batch_id từ lot đầu tiên trong list_product_lots
+     *   (tất cả lots cùng item thường cùng batch)
+     *
+     * @param object $source_item Ledger item object
+     * @param bool   $is_tracking Sản phẩm có tracking lot/HSD
+     * @return int|null batch_id hoặc null
+     */
+    private static function resolve_batch_id_for_item($source_item, $is_tracking)
+    {
+        // Non-tracking: lấy trực tiếp
+        $bid = intval($source_item->batch_id ?? 0);
+        if ($bid > 0) return $bid;
+
+        // Tracking: lấy từ lot đầu tiên
+        if ($is_tracking) {
+            $lot_ids = json_decode($source_item->list_product_lots ?? '[]', true) ?: [];
+            if (!empty($lot_ids)) {
+                global $wpdb;
+                $first_lot_id = intval($lot_ids[0]);
+                $lots_table = defined('TGS_TABLE_GLOBAL_PRODUCT_LOTS') ? TGS_TABLE_GLOBAL_PRODUCT_LOTS : 'wp_global_product_lots';
+                $lot_batch = $wpdb->get_var($wpdb->prepare(
+                    "SELECT batch_id FROM {$lots_table} WHERE global_product_lot_id = %d",
+                    $first_lot_id
+                ));
+                if ($lot_batch) return intval($lot_batch);
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -806,7 +944,8 @@ class TGS_Transfer_Ajax
                     'source_item' => $source_item,
                     'local_product' => $local_product,
                     'max_quantity' => $max_quantity,
-                    'note' => $item_note
+                    'note' => $item_note,
+                    'batch_id' => self::resolve_batch_id_for_item($source_item, $is_tracking),
                 ];
             }
 
@@ -1193,18 +1332,13 @@ class TGS_Transfer_Ajax
             // ========== CẬP NHẬT BATCH_DISTRIBUTION - Transfer Import ==========
             // Tăng qty tại shop đích (hàng đã nhận)
             if (class_exists('TGS_Batch_Distribution')) {
-                $items_with_batch = [];
-                foreach ($items as $item) {
-                    $bid = intval($item->batch_id ?? 0);
-                    if ($bid > 0) {
-                        $items_with_batch[] = [
-                            'batch_id' => $bid,
-                            'quantity' => floatval($item->quantity ?? 0),
-                        ];
-                    }
-                }
+                $items_with_batch = self::collect_items_with_batch($items);
                 if (!empty($items_with_batch)) {
                     TGS_Batch_Distribution::on_transfer_import_approved($current_blog_id, $items_with_batch);
+
+                    // Ghi batch_movement cho transfer import
+                    $source_blog_id_for_mv = $local_transfer ? intval($local_transfer->source_blog_id) : 0;
+                    self::record_batch_movements($items_with_batch, $source_blog_id_for_mv, $current_blog_id, 1, $ledger_id, $current_blog_id);
                 }
             }
 
