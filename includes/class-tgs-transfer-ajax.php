@@ -1689,6 +1689,7 @@ class TGS_Transfer_Ajax
 
             $item->synced_in_destination = ($exists > 0);
         }
+        unset($item); // CRITICAL: Break reference to avoid overwriting last element
 
         restore_current_blog();
 
@@ -1716,6 +1717,7 @@ class TGS_Transfer_Ajax
                 }
             }
         }
+        unset($item); // CRITICAL: Break reference
 
         wp_send_json_success([
             'transfer' => $transfer,
