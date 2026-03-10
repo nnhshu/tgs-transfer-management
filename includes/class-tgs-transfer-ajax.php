@@ -303,8 +303,8 @@ class TGS_Transfer_Ajax
                 if (!empty($items_with_batch)) {
                     TGS_Batch_Distribution::on_transfer_export_approved($current_blog_id, $items_with_batch);
 
-                    // Ghi batch_movement cho transfer export
-                    self::record_batch_movements($items_with_batch, $current_blog_id, $destination_blog_id, 1, $ledger_id, $current_blog_id);
+                    // Không ghi batch_movement ở đây — sẽ ghi 1 lần duy nhất
+                    // khi approve_import (hàng thực sự đến đích) để tránh duplicate.
                 }
             }
 
@@ -449,6 +449,20 @@ class TGS_Transfer_Ajax
         }
 
         foreach ($batch_qty as $batch_id => $quantity) {
+            // Chống trùng: nếu đã có movement cùng batch + from + to + ledger + type
+            // trong vòng 5 phút gần đây → bỏ qua
+            $dup = $wpdb->get_var($wpdb->prepare(
+                "SELECT movement_id FROM {$table}
+                 WHERE batch_id = %d AND from_blog_id = %d AND to_blog_id = %d
+                   AND movement_type = %d AND source_ledger_id = %d
+                   AND is_deleted = 0
+                   AND created_at >= DATE_SUB(%s, INTERVAL 5 MINUTE)
+                 LIMIT 1",
+                $batch_id, $from_blog_id, $to_blog_id,
+                $movement_type, $source_ledger_id ?: 0, $now
+            ));
+            if ($dup) continue;
+
             $wpdb->insert($table, [
                 'batch_id' => $batch_id,
                 'from_blog_id' => $from_blog_id ?: null,
