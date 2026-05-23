@@ -2305,7 +2305,12 @@ class TGS_Transfer_Ajax
             'local_product_unit' => $source_product->local_product_unit ?? '',
             'local_product_category_path' => $source_product->local_product_category_path ?? '',
             'local_product_warehouse_htsoft' => $source_product->local_product_warehouse_htsoft ?? '',
-            'local_product_list_category_id' => $source_product->local_product_list_category_id ?? null
+            'local_product_list_category_id' => $source_product->local_product_list_category_id ?? null,
+            // HSD tracking columns (thêm 2026-04-12)
+            'local_product_parent_sku' => $source_product->local_product_parent_sku ?? null,
+            'local_product_hsd' => $source_product->local_product_hsd ?? null,
+            'local_product_special_barcode' => $source_product->local_product_special_barcode ?? null,
+            'local_product_special_barcode_url' => $source_product->local_product_special_barcode_url ?? null,
         ]);
 
         return $wpdb->insert_id ?: false;
