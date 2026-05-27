@@ -964,6 +964,7 @@ class TGS_Transfer_Ajax
                     'batch_id' => self::resolve_batch_id_for_item($source_item, $is_tracking),
                     'sku' => $sku,
                     'doc_quantity' => floatval($source_item->local_ledger_item_doc_quantity ?? 0),
+                    'software_source' => $source_item->local_ledger_item_software_source ?? null,
                 ];
             }
 
