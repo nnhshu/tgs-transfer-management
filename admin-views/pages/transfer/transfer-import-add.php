@@ -13,6 +13,9 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Mismatch confirm modal + JS helper (TgsTransferMismatch)
+require_once dirname(__DIR__, 2) . '/partials/transfer-mismatch-confirm.php';
+
 $ajax_url = admin_url('admin-ajax.php');
 $nonce = wp_create_nonce('tgs_transfer_nonce');
 $transfer_id = isset($_GET['transfer_id']) ? intval($_GET['transfer_id']) : 0;
@@ -104,6 +107,15 @@ if (!$transfer_id) {
                             <div class="col-md-2 mb-3">
                                 <small class="text-muted d-block">Ghi chú từ shop bán</small>
                                 <span class="text-muted fst-italic" id="infoNote">—</span>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-2">
+                                <small class="text-muted d-block">
+                                    <i class="bx bx-code-alt text-primary me-1"></i>Nguồn phần mềm
+                                    <span class="text-muted fst-italic">(kế thừa từ phiếu shop bán — tự động copy y hệt sang phiếu mua nội bộ)</span>
+                                </small>
+                                <span id="infoSoftwareSource" class="d-inline-flex flex-wrap gap-1">—</span>
                             </div>
                         </div>
                     </div>
@@ -463,8 +475,34 @@ jQuery(document).ready(function($) {
             : '<span class="badge bg-warning">Chờ duyệt</span>';
         $('#infoStatus').html(statusBadge);
 
+        // Hiển thị nguyồn phần mềm kế thừa từ phiếu shop bán
+        $('#infoSoftwareSource').html(renderSoftwareSourceBadges(transferData.local_ledger_software_source));
+
         // Hiển thị file chứng từ từ shop bán
         renderDocFiles();
+    }
+
+    function renderSoftwareSourceBadges(raw) {
+        if (raw === null || raw === undefined || raw === '' || raw === 'null') {
+            return '<span class="badge bg-secondary">Mặc định (hệ thống mình)</span>';
+        }
+        var arr = [];
+        try {
+            var v = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            if (typeof v === 'string') { try { v = JSON.parse(v); } catch(e){} }
+            arr = Array.isArray(v) ? v : [v];
+        } catch (e) {
+            arr = [String(raw)];
+        }
+        if (!arr.length) {
+            return '<span class="badge bg-secondary">Mặc định (hệ thống mình)</span>';
+        }
+        var labels = { 'root': 'Hệ thống mình', 'htsoft': 'HTSoft', 'thu_kho': 'Thủ kho' };
+        var colors = { 'root': 'bg-info', 'htsoft': 'bg-primary', 'thu_kho': 'bg-warning text-dark' };
+        return arr.map(function(s){
+            var key = String(s).trim();
+            return '<span class="badge ' + (colors[key] || 'bg-secondary') + '">' + (labels[key] || key) + '</span>';
+        }).join(' ');
     }
 
     function renderDocFiles() {
@@ -555,10 +593,13 @@ jQuery(document).ready(function($) {
             // Trạng thái - luôn là "Nhập hết" vì không có nhập 1 phần
             const itemStatus = '<span class="badge bg-success">Nhập hết</span>';
 
+            const docQtyForCompare = parseFloat(item.local_ledger_item_doc_quantity) || 0;
             html += `
                 <tr data-sku="${escapeHtml(sku)}" data-max="${maxQty}" data-tracking="${isTracking ? 1 : 0}"
                     data-price="${price}" data-tax-percent="${taxPercent}" data-discount-percent="${discountPercent}"
-                    data-subtotal-no-vat="${subtotalNoVat}" data-tax-amount="${taxAmount}" data-subtotal="${subtotal}">
+                    data-subtotal-no-vat="${subtotalNoVat}" data-tax-amount="${taxAmount}" data-subtotal="${subtotal}"
+                    data-import-qty="${importQty}" data-doc-qty="${docQtyForCompare}"
+                    data-product-name="${escapeHtml(item.product_name || '')}">
                     <td>${index + 1}</td>
                     <td>
                         <strong>${escapeHtml(item.product_name)}</strong>
@@ -585,6 +626,11 @@ jQuery(document).ready(function($) {
         $('#productsTableBody').html(html);
         $('#productCount').text(productsData.length + ' sản phẩm');
         $('#productsTableFoot').show();
+
+        // Đánh dấu các dòng lệch SL nhập vs SL chứng từ
+        if (window.TgsTransferMismatch) {
+            window.TgsTransferMismatch.markRows('#productsTableBody');
+        }
 
         // Show sync warning
         if (needsSync > 0) {
@@ -973,37 +1019,43 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Đang xử lý...');
-
-        $.ajax({
-            url: ajaxUrl,
-            type: 'POST',
-            data: {
-                action: 'tgs_transfer_create_import',
-                nonce: nonce,
-                transfer_id: transferId,
-                note: $('#importNote').val(),
-                items: JSON.stringify(itemsData),
-                advance_meta: JSON.stringify({ doc_files: docFilesList })
-            },
-            success: function(response) {
-                if (response.success) {
-                    showAlert('success', 'Tạo phiếu mua thành công! Mã phiếu: #' + response.data.ledger_id);
-
-                    // Redirect to detail page after 2 seconds
-                    setTimeout(function() {
-                        window.location.href = '<?php echo admin_url('admin.php?page=tgs-shop-management&view=ticket-transfer-import-detail'); ?>&id=' + response.data.ledger_id;
-                    }, 2000);
-                } else {
-                    showAlert('danger', response.data?.message || 'Có lỗi khi tạo phiếu mua');
+        function doCreate() {
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Đang xử lý...');
+            $.ajax({
+                url: ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'tgs_transfer_create_import',
+                    nonce: nonce,
+                    transfer_id: transferId,
+                    note: $('#importNote').val(),
+                    items: JSON.stringify(itemsData),
+                    advance_meta: JSON.stringify({ doc_files: docFilesList })
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showAlert('success', 'Tạo phiếu mua thành công! Mã phiếu: #' + response.data.ledger_id);
+                        setTimeout(function() {
+                            window.location.href = '<?php echo admin_url('admin.php?page=tgs-shop-management&view=ticket-transfer-import-detail'); ?>&id=' + response.data.ledger_id;
+                        }, 2000);
+                    } else {
+                        showAlert('danger', response.data?.message || 'Có lỗi khi tạo phiếu mua');
+                        btn.prop('disabled', false).html(originalText);
+                    }
+                },
+                error: function() {
+                    showAlert('danger', 'Có lỗi kết nối server');
                     btn.prop('disabled', false).html(originalText);
                 }
-            },
-            error: function() {
-                showAlert('danger', 'Có lỗi kết nối server');
-                btn.prop('disabled', false).html(originalText);
-            }
-        });
+            });
+        }
+
+        // Cảnh báo lệch SL nhập vs SL chứng từ trước khi tạo
+        if (window.TgsTransferMismatch) {
+            window.TgsTransferMismatch.confirmIfMismatch('#productsTableBody', doCreate);
+        } else {
+            doCreate();
+        }
     });
 
     // HELPERS

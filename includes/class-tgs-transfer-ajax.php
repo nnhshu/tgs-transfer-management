@@ -844,6 +844,9 @@ class TGS_Transfer_Ajax
 
         $source_shop_name = get_bloginfo('name');
 
+        // Lưu nguyên nguyồn phần mềm của phiếu gốc shop kia để copy y hệt sang phiếu mới
+        $source_ledger_software_source = $source_ledger->local_ledger_software_source ?? null;
+
         restore_current_blog();
 
         if (empty($source_items)) {
@@ -964,7 +967,7 @@ class TGS_Transfer_Ajax
                     'batch_id' => self::resolve_batch_id_for_item($source_item, $is_tracking),
                     'sku' => $sku,
                     'doc_quantity' => floatval($source_item->local_ledger_item_doc_quantity ?? 0),
-                    'software_source' => $source_item->local_ledger_item_software_source ?? null,
+                    'software_source' => $source_item->local_ledger_item_software_source ?? $source_ledger_software_source,
                 ];
             }
 
@@ -1009,6 +1012,7 @@ class TGS_Transfer_Ajax
                 'local_ledger_total_amount' => $total_amount,
                 'local_ledger_status' => TGS_LEDGER_STATUS_PENDING,
                 'local_ledger_approver_status' => TGS_APPROVER_STATUS_PENDING,
+                'local_ledger_software_source' => $source_ledger_software_source,
                 'local_ledger_advance_meta' => $advance_meta_to_save,
                 'user_id' => $current_user_id,
                 'is_deleted' => 0,
@@ -1037,6 +1041,7 @@ class TGS_Transfer_Ajax
                 'local_ledger_total_amount' => $total_amount,
                 'local_ledger_status' => TGS_LEDGER_STATUS_PENDING,
                 'local_ledger_approver_status' => TGS_APPROVER_STATUS_PENDING,
+                'local_ledger_software_source' => $source_ledger_software_source,
                 'user_id' => $current_user_id,
             ];
 
@@ -1113,6 +1118,27 @@ class TGS_Transfer_Ajax
                 'transfer_type' => $config['ticket_log_type'] ?? 'import'
             ], $config['labels']['ticket_log_desc'] . ': ' . $source_shop_name);
 
+            // ========== HOOK: tgs_ticket_created — doc_tracker ghi nhận lệch chứng từ ==========
+            if (!empty($config['doc_tracker_ticket_type'])) {
+                $hook_items = [];
+                foreach ($import_items_data as $item_data) {
+                    $hook_items[] = [
+                        'product_id'   => intval($item_data['product_id'] ?? 0),
+                        'quantity'     => floatval($item_data['quantity'] ?? 0),
+                        'doc_quantity' => floatval($item_data['doc_quantity'] ?? 0),
+                        'software_source' => $item_data['software_source'] ?? null,
+                    ];
+                }
+                do_action('tgs_ticket_created', $parent_ledger_id, $config['doc_tracker_ticket_type'], [
+                    'items'           => $hook_items,
+                    'blog_id'         => get_current_blog_id(),
+                    'user_id'         => $current_user_id,
+                    'ticket_code'     => $parent_ledger_code,
+                    'child_ledger_id' => $auto_import_ledger_id,
+                    'software_source' => $source_ledger_software_source ?? null,
+                ]);
+            }
+
             wp_send_json_success([
                 'message' => $config['success_message'],
                 'ledger_id' => $parent_ledger_id,
@@ -1151,6 +1177,7 @@ class TGS_Transfer_Ajax
             'redirect_view' => 'ticket-transfer-import-detail',
             'success_message' => 'Tạo phiếu mua nội bộ thành công',
             'ticket_log_type' => 'import',
+            'doc_tracker_ticket_type' => 'internal_purchase',
             'labels' => [
                 'transfer_not_found' => 'Không tìm thấy phiếu chuyển',
                 'already_created' => 'Phiếu này đã được tạo phiếu nhập trước đó',
@@ -1647,10 +1674,11 @@ class TGS_Transfer_Ajax
         $ledger_item_table = $wpdb->prefix . 'local_ledger_item';
         $products_table = $wpdb->prefix . 'local_product_name';
 
-        // Lấy thông tin ledger từ shop mẹ (bao gồm advance_meta để lấy file chứng từ)
+        // Lấy thông tin ledger từ shop mẹ (bao gồm advance_meta + nguyồn phần mềm để kế thừa)
         $ledger = $wpdb->get_row($wpdb->prepare("
             SELECT local_ledger_code, local_ledger_total_amount, local_ledger_note,
-                   local_ledger_approver_status, local_ledger_advance_meta
+                   local_ledger_approver_status, local_ledger_advance_meta,
+                   local_ledger_software_source
             FROM {$ledger_table}
             WHERE local_ledger_id = %d
         ", $source_ledger_id));
@@ -1661,6 +1689,7 @@ class TGS_Transfer_Ajax
             $transfer->local_ledger_note = $ledger->local_ledger_note;
             $transfer->local_ledger_approver_status = $ledger->local_ledger_approver_status;
             $transfer->local_ledger_advance_meta = $ledger->local_ledger_advance_meta;
+            $transfer->local_ledger_software_source = $ledger->local_ledger_software_source;
         }
 
         // Kiểm tra phiếu xuất tự động (phiếu con) đã duyệt chưa
@@ -2785,6 +2814,7 @@ class TGS_Transfer_Ajax
             'redirect_view' => 'ticket-internal-return-receive-detail',
             'success_message' => 'Tạo phiếu nhận trả nội bộ thành công',
             'ticket_log_type' => 'return_receive',
+            'doc_tracker_ticket_type' => 'internal_return_receive',
             'labels' => [
                 'transfer_not_found' => 'Không tìm thấy phiếu chuyển trả',
                 'already_created' => 'Phiếu này đã được tạo phiếu nhận trả trước đó',
