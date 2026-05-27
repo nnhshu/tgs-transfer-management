@@ -111,6 +111,25 @@ if (!$transfer_id) {
             </div>
         </div>
 
+        <!-- Row 1.5: Chứng từ từ shop trả -->
+        <div class="row mb-4" id="docFilesRow" style="display:none;">
+            <div class="col-12">
+                <div class="card border-primary">
+                    <div class="card-header d-flex align-items-center gap-2 bg-primary bg-opacity-10">
+                        <i class="bx bx-file-blank text-primary fs-5"></i>
+                        <h5 class="card-title mb-0 text-primary">Chứng từ từ shop trả</h5>
+                        <span class="badge bg-primary ms-auto" id="docFilesCount">0 file</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">Các file chứng từ được kế thừa từ phiếu trả hàng nội bộ của shop nguồn. Sẽ được lưu vào phiếu nhận trả.</p>
+                        <div id="docFilesList" class="d-flex flex-wrap gap-3">
+                            <p class="text-muted fst-italic">Không có chứng từ từ shop trả.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Row 2: Products Table (full width) -->
         <div class="row mb-4">
             <div class="col-12">
@@ -130,6 +149,7 @@ if (!$transfer_id) {
                                         <th style="width: 5%;">SL tối đa</th>
                                         <th style="width: 10%;">Mã định danh</th>
                                         <th style="width: 5%;">SL nhận</th>
+                                        <th style="width: 5%;" title="Số lượng từ chứng từ gốc">SL CT</th>
                                         <th style="width: 8%;">Đơn giá</th>
                                         <th style="width: 8%;">TT không VAT</th>
                                         <th style="width: 5%;">CK(%)</th>
@@ -142,7 +162,7 @@ if (!$transfer_id) {
                                 </thead>
                                 <tbody id="productsTableBody">
                                     <tr>
-                                        <td colspan="14" class="text-center py-4 text-muted">
+                                        <td colspan="15" class="text-center py-4 text-muted">
                                             Đang tải sản phẩm...
                                         </td>
                                     </tr>
@@ -151,6 +171,7 @@ if (!$transfer_id) {
                                     <tr>
                                         <td colspan="5" class="text-end fw-semibold">Tổng cộng:</td>
                                         <td class="fw-semibold" id="footTotalImport">0</td>
+                                        <td></td>
                                         <td></td>
                                         <td class="fw-semibold" id="footTotalNoVat">0 đ</td>
                                         <td></td>
@@ -330,6 +351,7 @@ jQuery(document).ready(function($) {
 
     let transferData = null;
     let productsData = [];
+    let docFilesList = [];
 
     // Lưu trữ dữ liệu nhập cho từng sản phẩm
     // Key = sku, Value = { quantity, selectedLots: [] }
@@ -440,11 +462,48 @@ jQuery(document).ready(function($) {
             ? '<span class="badge bg-success">Đã duyệt trả</span>'
             : '<span class="badge bg-warning">Chờ duyệt</span>';
         $('#infoStatus').html(statusBadge);
+
+        // Hiển thị file chứng từ từ shop trả
+        renderDocFiles();
+    }
+
+    function renderDocFiles() {
+        let metaObj = {};
+        const rawMeta = transferData.local_ledger_advance_meta;
+        if (rawMeta) {
+            try { metaObj = typeof rawMeta === 'string' ? JSON.parse(rawMeta) : rawMeta; } catch (e) {}
+        }
+        docFilesList = Array.isArray(metaObj.doc_files) ? metaObj.doc_files : [];
+
+        if (docFilesList.length === 0) {
+            $('#docFilesRow').hide();
+            return;
+        }
+
+        $('#docFilesRow').show();
+        $('#docFilesCount').text(docFilesList.length + ' file');
+
+        const icons = { image: 'bx-image', excel: 'bx-spreadsheet', pdf: 'bx-file-pdf' };
+        let html = '';
+        docFilesList.forEach(function (f) {
+            const icon = icons[f.file_type] || 'bx-file-blank';
+            const sizeKb = f.file_size ? Math.round(f.file_size / 1024) + ' KB' : '';
+            html += `
+                <div class="d-flex align-items-center gap-2 border rounded px-3 py-2 bg-white">
+                    <i class="bx ${icon} fs-5 text-primary"></i>
+                    <div>
+                        <a href="${escapeHtml(f.file_url)}" target="_blank" class="fw-semibold text-break small">${escapeHtml(f.file_name)}</a>
+                        <br><small class="text-muted">${escapeHtml(f.file_type || '')}${sizeKb ? ' · ' + sizeKb : ''}</small>
+                    </div>
+                </div>
+            `;
+        });
+        $('#docFilesList').html(html);
     }
 
     function renderProducts() {
         if (!productsData || productsData.length === 0) {
-            $('#productsTableBody').html('<tr><td colspan="14" class="text-center py-4 text-muted">Không có sản phẩm</td></tr>');
+            $('#productsTableBody').html('<tr><td colspan="15" class="text-center py-4 text-muted">Không có sản phẩm</td></tr>');
             return;
         }
 
@@ -510,6 +569,7 @@ jQuery(document).ready(function($) {
                     <td class="text-center"><strong>${maxQty}</strong></td>
                     <td class="text-center">${lotColumn}</td>
                     <td class="text-center">${qtyColumn}</td>
+                    <td class="text-center"><span class="text-primary small fw-semibold" title="Số lượng có trong chứng từ gốc">${parseFloat(item.local_ledger_item_doc_quantity) > 0 ? parseFloat(item.local_ledger_item_doc_quantity) : '—'}</span></td>
                     <td class="text-end">${formatCurrency(price)}</td>
                     <td class="text-end">${formatCurrency(subtotalNoVat)}</td>
                     <td class="text-center">${discountPercent > 0 ? discountPercent + '%' : '—'}</td>
@@ -892,6 +952,7 @@ jQuery(document).ready(function($) {
                 sku: sku,
                 max_quantity: data.maxQuantity,
                 import_quantity: data.quantity,
+                doc_quantity: parseFloat(item.local_ledger_item_doc_quantity) || 0,
                 is_tracking: data.isTracking,
                 selected_lots: data.isTracking ? data.selectedLots : [],
                 source_ledger_item_id: item.local_ledger_item_id || item.ledger_item_id,
@@ -921,7 +982,8 @@ jQuery(document).ready(function($) {
                 nonce: nonce,
                 transfer_id: transferId,
                 note: $('#importNote').val(),
-                items: JSON.stringify(itemsData)
+                items: JSON.stringify(itemsData),
+                advance_meta: JSON.stringify({ doc_files: docFilesList })
             },
             success: function(response) {
                 if (response.success) {

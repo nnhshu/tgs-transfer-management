@@ -730,9 +730,11 @@ class TGS_Transfer_Ajax
         $current_blog_id = get_current_blog_id();
         $current_user_id = get_current_user_id();
 
-        $transfer_id = intval($_POST['transfer_id'] ?? 0);
-        $import_note = sanitize_textarea_field($_POST['note'] ?? $_POST['import_note'] ?? '');
-        $items_json = isset($_POST['items']) ? wp_unslash($_POST['items']) : '';
+        $transfer_id      = intval($_POST['transfer_id'] ?? 0);
+        $import_note      = sanitize_textarea_field($_POST['note'] ?? $_POST['import_note'] ?? '');
+        $items_json       = isset($_POST['items']) ? wp_unslash($_POST['items']) : '';
+        // advance_meta: danh sách file chứng từ được copy từ shop nguồn
+        $advance_meta_raw = !empty($_POST['advance_meta']) ? wp_unslash($_POST['advance_meta']) : '';
 
         if (!$transfer_id) {
             wp_send_json_error(['message' => 'Thiếu ID transfer']);
@@ -960,6 +962,8 @@ class TGS_Transfer_Ajax
                     'max_quantity' => $max_quantity,
                     'note' => $item_note,
                     'batch_id' => self::resolve_batch_id_for_item($source_item, $is_tracking),
+                    'sku' => $sku,
+                    'doc_quantity' => floatval($source_item->local_ledger_item_doc_quantity ?? 0),
                 ];
             }
 
@@ -980,6 +984,22 @@ class TGS_Transfer_Ajax
                 $parent_title = sprintf($config['parent_title_template'], $parent_ledger_code);
             }
 
+            // Xử lý advance_meta: giữ file từ shop nguồn hoặc dùng danh sách frontend gửi lên
+            $advance_meta_to_save = null;
+            if (!empty($advance_meta_raw)) {
+                // Validate JSON từ frontend
+                $decoded = json_decode($advance_meta_raw, true);
+                if (is_array($decoded)) {
+                    $advance_meta_to_save = wp_json_encode($decoded, JSON_UNESCAPED_UNICODE);
+                }
+            } elseif (!empty($source_ledger->local_ledger_advance_meta)) {
+                // Fallback: copy advance_meta từ shop nguồn
+                $source_meta = json_decode($source_ledger->local_ledger_advance_meta, true);
+                if (is_array($source_meta) && !empty($source_meta['doc_files'])) {
+                    $advance_meta_to_save = wp_json_encode(['doc_files' => $source_meta['doc_files']], JSON_UNESCAPED_UNICODE);
+                }
+            }
+
             $wpdb->insert($ledger_table, [
                 'local_ledger_code' => $parent_ledger_code,
                 'local_ledger_title' => $parent_title,
@@ -988,6 +1008,7 @@ class TGS_Transfer_Ajax
                 'local_ledger_total_amount' => $total_amount,
                 'local_ledger_status' => TGS_LEDGER_STATUS_PENDING,
                 'local_ledger_approver_status' => TGS_APPROVER_STATUS_PENDING,
+                'local_ledger_advance_meta' => $advance_meta_to_save,
                 'user_id' => $current_user_id,
                 'is_deleted' => 0,
                 'created_at' => current_time('mysql'),
@@ -1625,9 +1646,10 @@ class TGS_Transfer_Ajax
         $ledger_item_table = $wpdb->prefix . 'local_ledger_item';
         $products_table = $wpdb->prefix . 'local_product_name';
 
-        // Lấy thông tin ledger từ shop mẹ
+        // Lấy thông tin ledger từ shop mẹ (bao gồm advance_meta để lấy file chứng từ)
         $ledger = $wpdb->get_row($wpdb->prepare("
-            SELECT local_ledger_code, local_ledger_total_amount, local_ledger_note, local_ledger_approver_status
+            SELECT local_ledger_code, local_ledger_total_amount, local_ledger_note,
+                   local_ledger_approver_status, local_ledger_advance_meta
             FROM {$ledger_table}
             WHERE local_ledger_id = %d
         ", $source_ledger_id));
@@ -1637,6 +1659,7 @@ class TGS_Transfer_Ajax
             $transfer->local_ledger_total_amount = $ledger->local_ledger_total_amount;
             $transfer->local_ledger_note = $ledger->local_ledger_note;
             $transfer->local_ledger_approver_status = $ledger->local_ledger_approver_status;
+            $transfer->local_ledger_advance_meta = $ledger->local_ledger_advance_meta;
         }
 
         // Kiểm tra phiếu xuất tự động (phiếu con) đã duyệt chưa
