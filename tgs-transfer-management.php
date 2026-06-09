@@ -97,6 +97,7 @@ class TGS_Transfer_Management
      */
     private function load_dependencies()
     {
+        require_once TGS_TRANSFER_PLUGIN_DIR . 'includes/class-tgs-transfer-global-products.php';
         require_once TGS_TRANSFER_PLUGIN_DIR . 'includes/class-tgs-transfer-ajax.php';
     }
 

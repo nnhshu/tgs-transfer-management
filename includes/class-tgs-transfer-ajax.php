@@ -59,47 +59,9 @@ class TGS_Transfer_Ajax
     {
         check_ajax_referer('tgs_transfer_nonce', 'nonce');
 
-        global $wpdb;
         $current_blog_id = get_current_blog_id();
 
-        // Lấy sản phẩm từ local_product_name
-        $products_table = $wpdb->prefix . 'local_product_name';
-        $lots_table = TGS_TABLE_GLOBAL_PRODUCT_LOTS;
-
-        $products = $wpdb->get_results("
-            SELECT
-                p.local_product_name_id as id,
-                p.local_product_name as name,
-                p.local_product_barcode_main as barcode,
-                p.local_product_is_tracking as is_tracking,
-                p.local_product_price as price,
-                p.local_product_tax as tax_percent,
-                p.local_product_quantity_no_tracking as no_tracking_stock,
-                COALESCE(p.source_blog_id, 0) as source_blog_id,
-                JSON_UNQUOTE(JSON_EXTRACT(p.local_product_meta, '$.product_sku')) as sku
-            FROM {$products_table} p
-            WHERE p.is_deleted IS NULL OR p.is_deleted = 0
-            ORDER BY p.local_product_name ASC
-        ");
-
-        // Lấy số lượng tracking stock cho từng sản phẩm
-        foreach ($products as &$product) {
-            if (intval($product->is_tracking) === 1) {
-                // Đếm số lot đang active trong kho hiện tại
-                $tracking_stock = $wpdb->get_var($wpdb->prepare("
-                    SELECT COUNT(*)
-                    FROM {$lots_table}
-                    WHERE local_product_name_id = %d
-                    AND to_blog_id = %d
-                    AND local_product_lot_is_active = %d
-                    AND (is_deleted IS NULL OR is_deleted = 0)
-                ", $product->id, $current_blog_id, TGS_PRODUCT_LOT_ACTIVE));
-
-                $product->tracking_stock = intval($tracking_stock);
-            } else {
-                $product->tracking_stock = 0;
-            }
-        }
+        $products = TGS_Transfer_Global_Products::query_products_for_transfer($current_blog_id);
 
         wp_send_json_success(['products' => $products]);
     }
@@ -118,61 +80,31 @@ class TGS_Transfer_Ajax
             wp_send_json_error(['message' => 'Thiếu thông tin']);
         }
 
-        global $wpdb;
         $current_blog_id = get_current_blog_id();
+        $product_ids = array_values(array_unique(array_filter(array_map('intval', (array) $product_ids))));
 
-        // Lấy SKU của các sản phẩm hiện tại
-        $products_table = $wpdb->prefix . 'local_product_name';
-        $placeholders = implode(',', array_fill(0, count($product_ids), '%d'));
+        $products = TGS_Transfer_Global_Products::get_products_by_ids($product_ids, $current_blog_id);
+        $synced = array_map(static function ($product) {
+            return (int) ($product['global_product_name_id'] ?? 0);
+        }, $products);
+        $synced = array_values(array_filter(array_unique($synced)));
 
-        $products = $wpdb->get_results($wpdb->prepare("
-            SELECT local_product_name_id as id, local_product_sku as sku
-            FROM {$products_table}
-            WHERE local_product_name_id IN ({$placeholders})
-        ", ...$product_ids));
-
-        $synced = [];
-        $need_sync = [];
-
-        // Chuyển sang shop đích để kiểm tra
-        switch_to_blog($destination_blog_id);
-
-        $dest_products_table = $wpdb->prefix . 'local_product_name';
-
-        foreach ($products as $product) {
-            if (empty($product->sku)) {
-                $need_sync[] = $product->id;
-                continue;
-            }
-
-            // Kiểm tra SKU có tồn tại ở shop đích không
-            $exists = $wpdb->get_var($wpdb->prepare("
-                SELECT COUNT(*)
-                FROM {$dest_products_table}
-                WHERE local_product_sku = %s
-                AND (is_deleted IS NULL OR is_deleted = 0)
-            ", $product->sku));
-
-            if ($exists > 0) {
-                $synced[] = $product->id;
-            } else {
-                $need_sync[] = $product->id;
-            }
-        }
-
-        restore_current_blog();
+        // Catalog dùng chung bảng global nên không còn bước đồng bộ sản phẩm local sang shop đích.
 
         wp_send_json_success([
             'synced' => $synced,
-            'need_sync' => $need_sync
+            'need_sync' => [],
+            'missing_global' => array_values(array_diff($product_ids, $synced)),
+            'global_catalog' => true,
+            'destination_blog_id' => $destination_blog_id
         ]);
     }
 
     /**
      * Duyệt phiếu xuất - thực hiện:
      * 1. Cập nhật trạng thái lot thành PENDING (chờ nhận)
-     * 2. Trừ tồn kho không tracking
-     * 3. Đồng bộ sản phẩm sang shop đích nếu cần
+     * 2. Không ghi tồn catalog local; tồn non-tracking tính từ ledger/API theo SKU
+     * 3. Validate sản phẩm global dùng chung
      * 4. Tạo thông báo cho shop đích
      */
     public static function approve_export()
@@ -193,7 +125,6 @@ class TGS_Transfer_Ajax
 
         $ledger_table = $wpdb->prefix . 'local_ledger';
         $ledger_item_table = $wpdb->prefix . 'local_ledger_item';
-        $products_table = $wpdb->prefix . 'local_product_name';
         $transfer_table = $wpdb->prefix . 'transfer_ledger';
         $lots_table = TGS_TABLE_GLOBAL_PRODUCT_LOTS;
 
@@ -244,11 +175,11 @@ class TGS_Transfer_Ajax
 
         // Lấy các item từ phiếu con xuất kho
         $items = $wpdb->get_results($wpdb->prepare("
-            SELECT li.*, p.local_product_name, p.local_product_sku, p.local_product_is_tracking
+            SELECT li.*
             FROM {$ledger_item_table} li
-            JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
             WHERE li.local_ledger_id = %d
         ", $ledger_id));
+        $items = TGS_Transfer_Global_Products::enrich_ledger_items($items, $current_blog_id);
 
         $wpdb->query('START TRANSACTION');
 
@@ -292,8 +223,11 @@ class TGS_Transfer_Ajax
                     // Khi duyệt chỉ cần giữ nguyên, không làm gì thêm cho sản phẩm non-tracking
                 }
 
-                // Đồng bộ sản phẩm sang shop đích nếu chưa có
-                self::sync_product_to_destination($item, $destination_blog_id, $current_blog_id);
+                // Catalog sản phẩm là global, chỉ validate nhanh theo SKU/global id.
+                if (!self::sync_product_to_destination($item, $destination_blog_id, $current_blog_id)) {
+                    $sku = $item->local_product_sku ?? '';
+                    throw new Exception("Không tìm thấy sản phẩm global cho SKU '{$sku}'");
+                }
             }
 
             // ========== CẬP NHẬT BATCH_DISTRIBUTION - Transfer Export ==========
@@ -394,7 +328,9 @@ class TGS_Transfer_Ajax
         // Query batch_id từ lots cho tracking products
         $tracking_lot_ids = array_unique(array_filter($tracking_lot_ids));
         if (!empty($tracking_lot_ids)) {
-            $lots_table = defined('TGS_TABLE_GLOBAL_PRODUCT_LOTS') ? TGS_TABLE_GLOBAL_PRODUCT_LOTS : 'wp_global_product_lots';
+            $lots_table = defined('TGS_TABLE_GLOBAL_PRODUCT_LOTS')
+                ? TGS_TABLE_GLOBAL_PRODUCT_LOTS
+                : $wpdb->base_prefix . 'global_product_lots';
             $placeholders = implode(',', array_fill(0, count($tracking_lot_ids), '%d'));
             $lot_rows = $wpdb->get_results($wpdb->prepare(
                 "SELECT global_product_lot_id, batch_id FROM {$lots_table} WHERE global_product_lot_id IN ({$placeholders})",
@@ -501,7 +437,9 @@ class TGS_Transfer_Ajax
             if (!empty($lot_ids)) {
                 global $wpdb;
                 $first_lot_id = intval($lot_ids[0]);
-                $lots_table = defined('TGS_TABLE_GLOBAL_PRODUCT_LOTS') ? TGS_TABLE_GLOBAL_PRODUCT_LOTS : 'wp_global_product_lots';
+                $lots_table = defined('TGS_TABLE_GLOBAL_PRODUCT_LOTS')
+                    ? TGS_TABLE_GLOBAL_PRODUCT_LOTS
+                    : $wpdb->base_prefix . 'global_product_lots';
                 $lot_batch = $wpdb->get_var($wpdb->prepare(
                     "SELECT batch_id FROM {$lots_table} WHERE global_product_lot_id = %d",
                     $first_lot_id
@@ -514,8 +452,8 @@ class TGS_Transfer_Ajax
     }
 
     /**
-     * Đồng bộ sản phẩm từ shop nguồn sang shop đích
-     * Wrapper function - gọi sync_product_from_source sau khi switch_to_blog
+     * Validate sản phẩm global cho shop nguồn/đích.
+     * Giữ tên hàm cũ để không làm gãy các đoạn gọi nội bộ.
      *
      * @param object $item Thông tin item (chứa local_product_name_id, local_product_sku)
      * @param int $destination_blog_id Blog ID của shop đích
@@ -523,52 +461,9 @@ class TGS_Transfer_Ajax
      */
     private static function sync_product_to_destination($item, $destination_blog_id, $source_blog_id)
     {
-        global $wpdb;
-
-        $sku = $item->local_product_sku ?? '';
-
-        if (empty($sku)) {
-            return; // Không thể đồng bộ nếu không có SKU
-        }
-
-        // Chuyển sang shop đích để kiểm tra sản phẩm đã tồn tại chưa
-        switch_to_blog($destination_blog_id);
-
-        $dest_products_table = $wpdb->prefix . 'local_product_name';
-
-        // Kiểm tra sản phẩm đã tồn tại chưa (theo SKU)
-        $exists = $wpdb->get_var($wpdb->prepare("
-            SELECT local_product_name_id
-            FROM {$dest_products_table}
-            WHERE local_product_sku = %s
-            AND (is_deleted IS NULL OR is_deleted = 0)
-        ", $sku));
-
-        if ($exists) {
-            restore_current_blog();
-            return; // Đã có rồi
-        }
-
-        restore_current_blog();
-
-        // Lấy thông tin đầy đủ sản phẩm từ shop nguồn (đang ở shop nguồn)
-        $source_products_table = $wpdb->prefix . 'local_product_name';
-        $full_product = $wpdb->get_row($wpdb->prepare("
-            SELECT * FROM {$source_products_table}
-            WHERE local_product_name_id = %d
-        ", $item->local_product_name_id));
-
-        if (!$full_product) {
-            return;
-        }
-
-        // Chuyển sang shop đích và gọi hàm đồng bộ chung
-        switch_to_blog($destination_blog_id);
-
-        // Gọi hàm đồng bộ chung (hàm này đã xử lý đầy đủ: check exists, sync category, insert product)
-        self::sync_product_from_source($full_product, $source_blog_id);
-
-        restore_current_blog();
+        // Không còn copy catalog giữa các site. Tất cả sản phẩm dùng chung global catalog/API.
+        return TGS_Transfer_Global_Products::product_exists_for_item($item, $destination_blog_id)
+            || TGS_Transfer_Global_Products::product_exists_for_item($item, $source_blog_id);
     }
 
     /**
@@ -792,7 +687,6 @@ class TGS_Transfer_Ajax
 
         $source_ledger_table = $wpdb->prefix . 'local_ledger';
         $source_ledger_item_table = $wpdb->prefix . 'local_ledger_item';
-        $source_products_table = $wpdb->prefix . 'local_product_name';
 
         $source_ledger = $wpdb->get_row($wpdb->prepare("
             SELECT * FROM {$source_ledger_table}
@@ -834,12 +728,12 @@ class TGS_Transfer_Ajax
         if (!empty($item_ids)) {
             $item_ids_str = implode(',', array_map('intval', $item_ids));
             $source_items = $wpdb->get_results("
-                SELECT li.*, p.*
+                SELECT li.*
                 FROM {$source_ledger_item_table} li
-                JOIN {$source_products_table} p ON li.local_product_name_id = p.local_product_name_id
                 WHERE li.local_ledger_item_id IN ({$item_ids_str})
                 AND (li.is_deleted = 0 OR li.is_deleted IS NULL)
             ");
+            $source_items = TGS_Transfer_Global_Products::enrich_ledger_items($source_items, $source_blog_id);
         }
 
         $source_shop_name = get_bloginfo('name');
@@ -858,7 +752,6 @@ class TGS_Transfer_Ajax
 
         try {
             $ledger_table = $wpdb->prefix . 'local_ledger';
-            $products_table = $wpdb->prefix . 'local_product_name';
             $lots_table = TGS_TABLE_GLOBAL_PRODUCT_LOTS;
 
             // Tạo mã phiếu
@@ -872,7 +765,7 @@ class TGS_Transfer_Ajax
             $total_import_qty = 0;
 
             foreach ($source_items as $source_item) {
-                $sku = $source_item->local_product_sku ?? '';
+                $sku = TGS_Transfer_Global_Products::row_sku((array) $source_item);
                 $is_tracking = intval($source_item->local_product_is_tracking) === 1;
                 $max_quantity = intval($source_item->quantity);
 
@@ -916,22 +809,9 @@ class TGS_Transfer_Ajax
                     continue;
                 }
 
-                // Tìm hoặc tạo sản phẩm ở shop hiện tại (theo SKU)
-                $local_product = $wpdb->get_row($wpdb->prepare("
-                    SELECT * FROM {$products_table}
-                    WHERE local_product_sku = %s
-                    AND (is_deleted IS NULL OR is_deleted = 0)
-                ", $sku));
-
-                if (!$local_product) {
-                    $new_product_id = self::sync_product_from_source($source_item, $source_blog_id);
-                    if (!$new_product_id) {
-                        throw new Exception("Lỗi tạo sản phẩm mới với SKU '{$sku}'");
-                    }
-                    $local_product = $wpdb->get_row($wpdb->prepare("
-                        SELECT * FROM {$products_table}
-                        WHERE local_product_name_id = %d
-                    ", $new_product_id));
+                $global_product_id = TGS_Transfer_Global_Products::row_product_id((array) $source_item);
+                if ($global_product_id <= 0 || !TGS_Transfer_Global_Products::product_exists_for_item($source_item, $current_blog_id)) {
+                    throw new Exception("Không tìm thấy sản phẩm global cho SKU '{$sku}'");
                 }
 
                 $price = floatval($source_item->price ?? 0);
@@ -949,7 +829,7 @@ class TGS_Transfer_Ajax
                 $item_note = $item_notes_map[$sku] ?? ($source_item->local_ledger_item_note ?? '');
 
                 $import_items_data[] = [
-                    'product_id' => $local_product->local_product_name_id,
+                    'product_id' => $global_product_id,
                     'quantity' => $import_quantity,
                     'price' => $price,
                     'tax_percent' => $tax_percent,
@@ -961,11 +841,12 @@ class TGS_Transfer_Ajax
                     'lot_barcodes' => $lot_barcodes_to_import,
                     'is_tracking' => $is_tracking,
                     'source_item' => $source_item,
-                    'local_product' => $local_product,
+                    'local_product' => $source_item,
                     'max_quantity' => $max_quantity,
                     'note' => $item_note,
                     'batch_id' => self::resolve_batch_id_for_item($source_item, $is_tracking),
                     'sku' => $sku,
+                    'unit' => $source_item->local_product_unit ?? '',
                     'doc_quantity' => floatval($source_item->local_ledger_item_doc_quantity ?? 0),
                     'software_source' => $source_item->local_ledger_item_software_source ?? $source_ledger_software_source,
                 ];
@@ -1197,7 +1078,7 @@ class TGS_Transfer_Ajax
     /**
      * Duyệt phiếu nhập - thực hiện:
      * 1. Chuyển lot sang ACTIVE trong kho hiện tại
-     * 2. Cộng tồn kho không tracking
+     * 2. Không ghi tồn catalog local; tồn non-tracking tính từ ledger/API theo SKU
      * 3. Cập nhật transfer_status thành ACCEPTED hoặc PARTIAL
      */
     public static function approve_import()
@@ -1217,7 +1098,6 @@ class TGS_Transfer_Ajax
 
         $ledger_table = $wpdb->prefix . 'local_ledger';
         $ledger_item_table = $wpdb->prefix . 'local_ledger_item';
-        $products_table = $wpdb->prefix . 'local_product_name';
         $lots_table = TGS_TABLE_GLOBAL_PRODUCT_LOTS;
 
         // Lấy thông tin phiếu con nhập kho (type 1 - PURCHASE)
@@ -1254,11 +1134,11 @@ class TGS_Transfer_Ajax
 
         // Lấy các item từ phiếu con nhập kho
         $items = $wpdb->get_results($wpdb->prepare("
-            SELECT li.*, p.local_product_name, p.local_product_is_tracking
+            SELECT li.*
             FROM {$ledger_item_table} li
-            JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
             WHERE li.local_ledger_id = %d
         ", $ledger_id));
+        $items = TGS_Transfer_Global_Products::enrich_ledger_items($items, $current_blog_id);
 
         // Tìm transfer_ledger thông qua phiếu cha để xác định is_partial
         $local_transfer_table = $wpdb->prefix . 'transfer_ledger';
@@ -1380,15 +1260,7 @@ class TGS_Transfer_Ajax
                         ]);
                     }
                 } else {
-                    // Cộng tồn kho không tracking
-                    $quantity = floatval($item->quantity);
-
-                    $wpdb->query($wpdb->prepare("
-                        UPDATE {$products_table}
-                        SET local_product_quantity_no_tracking = local_product_quantity_no_tracking + %f,
-                            updated_at = %s
-                        WHERE local_product_name_id = %d
-                    ", $quantity, current_time('mysql'), $item->local_product_name_id));
+                    // Không ghi tồn vào catalog local. Tồn non-tracking được tính từ ledger/API theo SKU.
                 }
             }
 
@@ -1590,7 +1462,6 @@ class TGS_Transfer_Ajax
 
         $ledger_table = $wpdb->prefix . 'local_ledger';
         $ledger_item_table = $wpdb->prefix . 'local_ledger_item';
-        $products_table = $wpdb->prefix . 'local_product_name';
 
         $ledger = $wpdb->get_row($wpdb->prepare("
             SELECT * FROM {$ledger_table}
@@ -1604,11 +1475,11 @@ class TGS_Transfer_Ajax
 
         // Lấy các item
         $items = $wpdb->get_results($wpdb->prepare("
-            SELECT li.*, p.local_product_name, p.local_product_sku, p.local_product_is_tracking
+            SELECT li.*
             FROM {$ledger_item_table} li
-            JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
             WHERE li.local_ledger_id = %d
         ", $ledger_id));
+        $items = TGS_Transfer_Global_Products::enrich_ledger_items($items, get_current_blog_id());
 
         // Nếu là phiếu xuất, lấy thêm thông tin transfer
         $transfer = null;
@@ -1672,7 +1543,6 @@ class TGS_Transfer_Ajax
 
         $ledger_table = $wpdb->prefix . 'local_ledger';
         $ledger_item_table = $wpdb->prefix . 'local_ledger_item';
-        $products_table = $wpdb->prefix . 'local_product_name';
 
         // Lấy thông tin ledger từ shop mẹ (bao gồm advance_meta + nguyồn phần mềm để kế thừa)
         $ledger = $wpdb->get_row($wpdb->prepare("
@@ -1729,36 +1599,22 @@ class TGS_Transfer_Ajax
             if (!empty($item_ids)) {
                 $item_ids_str = implode(',', array_map('intval', $item_ids));
                 $items = $wpdb->get_results("
-                    SELECT li.*, p.local_product_name as product_name,
-                           p.local_product_sku as sku,
-                           p.local_product_barcode_main as barcode,
-                           p.local_product_is_tracking as is_tracking
+                    SELECT li.*
                     FROM {$ledger_item_table} li
-                    JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
                     WHERE li.local_ledger_item_id IN ({$item_ids_str})
                     AND (li.is_deleted = 0 OR li.is_deleted IS NULL)
                 ");
+                $items = TGS_Transfer_Global_Products::enrich_ledger_items($items, $source_blog_id);
             }
         }
 
         restore_current_blog();
 
-        // Step 3: Kiểm tra sync status cho từng sản phẩm ở shop đích (shop con) theo SKU
-        switch_to_blog($destination_blog_id);
-        $dest_products_table = $wpdb->prefix . 'local_product_name';
-
+        // Step 3: Catalog dùng chung global nên sản phẩm luôn đồng bộ cho shop đích.
         foreach ($items as &$item) {
-            $exists = $wpdb->get_var($wpdb->prepare("
-                SELECT COUNT(*) FROM {$dest_products_table}
-                WHERE local_product_sku = %s
-                AND (is_deleted IS NULL OR is_deleted = 0)
-            ", $item->sku));
-
-            $item->synced_in_destination = ($exists > 0);
+            $item->synced_in_destination = true;
         }
         unset($item); // CRITICAL: Break reference to avoid overwriting last element
-
-        restore_current_blog();
 
         // Step 4: Lấy thông tin chi tiết lots từ bảng global cho các sản phẩm tracking
         foreach ($items as &$item) {
@@ -1835,7 +1691,6 @@ class TGS_Transfer_Ajax
 
         $ledger_table = $wpdb->prefix . 'local_ledger';
         $ledger_item_table = $wpdb->prefix . 'local_ledger_item';
-        $products_table = $wpdb->prefix . 'local_product_name';
 
         // Lấy local_ledger_item_id từ phiếu cha
         $source_ledger = $wpdb->get_row($wpdb->prepare("
@@ -1849,15 +1704,12 @@ class TGS_Transfer_Ajax
             if (!empty($item_ids)) {
                 $item_ids_str = implode(',', array_map('intval', $item_ids));
                 $items = $wpdb->get_results("
-                    SELECT li.*,
-                           p.local_product_name as product_name,
-                           p.local_product_sku as sku,
-                           p.local_product_is_tracking as is_tracking
+                    SELECT li.*
                     FROM {$ledger_item_table} li
-                    JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
                     WHERE li.local_ledger_item_id IN ({$item_ids_str})
                     AND (li.is_deleted = 0 OR li.is_deleted IS NULL)
                 ");
+                $items = TGS_Transfer_Global_Products::enrich_ledger_items($items, $source_blog_id);
             }
         }
 
@@ -2290,83 +2142,21 @@ class TGS_Transfer_Ajax
     }
 
     // =========================================================================
-    // HELPER FUNCTIONS - Đồng bộ sản phẩm và danh mục từ shop mẹ
+    // HELPER FUNCTIONS - Sản phẩm global dùng chung
     // =========================================================================
 
     /**
-     * Đồng bộ sản phẩm từ shop nguồn sang shop hiện tại
+     * Giữ tên hàm cũ để tương thích code gọi nội bộ.
+     * Không còn tạo/copy sản phẩm local; chỉ trả về ID global nếu tìm thấy.
      *
      * @param object $source_product Thông tin sản phẩm từ shop nguồn
      * @param int $source_blog_id Blog ID của shop nguồn
-     * @return int|false ID sản phẩm mới tạo hoặc false nếu lỗi
+     * @return int|false ID sản phẩm global hoặc false nếu lỗi
      */
     private static function sync_product_from_source($source_product, $source_blog_id)
     {
-        global $wpdb;
-
-        $products_table = $wpdb->prefix . 'local_product_name';
-
-        // Kiểm tra sản phẩm đã tồn tại chưa (theo SKU - ưu tiên hơn barcode)
-        $source_sku = $source_product->local_product_sku ?? '';
-
-        if (!empty($source_sku)) {
-            $existing = $wpdb->get_row($wpdb->prepare("
-                SELECT local_product_name_id FROM {$products_table}
-                WHERE local_product_sku = %s
-                AND (is_deleted IS NULL OR is_deleted = 0)
-            ", $source_sku));
-
-            if ($existing) {
-                return $existing->local_product_name_id;
-            }
-        }
-
-
-        // Tạo sản phẩm mới - chỉ sử dụng các cột có trong schema gốc
-        // Các field phụ (sku, weight, unit, brand, origin, gallery) được lưu trong local_product_meta
-        $meta = $source_product->local_product_meta;
-        if (is_string($meta)) {
-            $meta_array = json_decode($meta, true) ?: [];
-        } elseif (is_array($meta)) {
-            $meta_array = $meta;
-        } else {
-            $meta_array = [];
-        }
-
-        $wpdb->insert($products_table, [
-            'source_blog_id' => $source_blog_id,
-            'local_product_barcode_main' => $source_product->local_product_barcode_main,
-            'local_product_barcode_url_main' => $source_product->local_product_barcode_url_main ?? '',
-            'local_product_name' => $source_product->local_product_name,
-            'global_product_name' => $source_product->global_product_name ?? '',
-            'local_product_price' => $source_product->local_product_price ?? 0,
-            'local_product_is_tracking' => $source_product->local_product_is_tracking ?? 0,
-            'local_product_quantity_no_tracking' => 0, // Mới tạo, chưa có tồn kho
-            'local_product_status' => TGS_PRODUCT_STATUS_ACTIVE,
-            'local_product_thumbnail' => $source_product->local_product_thumbnail ?? '',
-            'local_product_description' => $source_product->local_product_description ?? '',
-            'local_product_content' => $source_product->local_product_content ?? '',
-            'local_product_tax' => $source_product->local_product_tax ?? 0,
-            'local_product_point' => $source_product->local_product_point ?? 0,
-            'local_product_meta' => !empty($meta_array) ? json_encode($meta_array, JSON_UNESCAPED_UNICODE) : null,
-            'user_id' => get_current_user_id(),
-            'is_deleted' => 0,
-            'created_at' => current_time('mysql'),
-            'updated_at' => current_time('mysql'),
-            'local_product_price_after_tax' => $source_product->local_product_price_after_tax ?? 0,
-            'local_product_sku' => $source_product->local_product_sku ?? '',
-            'local_product_unit' => $source_product->local_product_unit ?? '',
-            'local_product_category_path' => $source_product->local_product_category_path ?? '',
-            'local_product_warehouse_htsoft' => $source_product->local_product_warehouse_htsoft ?? '',
-            'local_product_list_category_id' => $source_product->local_product_list_category_id ?? null,
-            // HSD tracking columns (thêm 2026-04-12)
-            'local_product_parent_sku' => $source_product->local_product_parent_sku ?? null,
-            'local_product_hsd' => $source_product->local_product_hsd ?? null,
-            'local_product_special_barcode' => $source_product->local_product_special_barcode ?? null,
-            'local_product_special_barcode_url' => $source_product->local_product_special_barcode_url ?? null,
-        ]);
-
-        return $wpdb->insert_id ?: false;
+        $product = TGS_Transfer_Global_Products::get_product_for_item($source_product, $source_blog_id);
+        return $product ? (int) ($product['global_product_name_id'] ?? 0) : false;
     }
 
 
@@ -2395,8 +2185,7 @@ class TGS_Transfer_Ajax
 
         $ledger_table = $wpdb->prefix . 'local_ledger';
         $ledger_item_table = $wpdb->prefix . 'local_ledger_item';
-        $products_table = $wpdb->prefix . 'local_product_name';
-        $lots_table = 'wp_global_product_lots';
+        $lots_table = TGS_TABLE_GLOBAL_PRODUCT_LOTS;
 
         // Lấy thông tin phiếu con xuất (type 2 = SALE)
         $child_ledger = $wpdb->get_row($wpdb->prepare("
@@ -2432,12 +2221,12 @@ class TGS_Transfer_Ajax
 
         // Lấy các item từ phiếu con xuất (chính là ledger_id được gửi lên)
         $items = $wpdb->get_results($wpdb->prepare("
-            SELECT li.*, p.local_product_name, p.local_product_is_tracking
+            SELECT li.*
             FROM {$ledger_item_table} li
-            JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
             WHERE li.local_ledger_id = %d
             AND (li.is_deleted = 0 OR li.is_deleted IS NULL)
         ", $ledger_id));
+        $items = TGS_Transfer_Global_Products::enrich_ledger_items($items, $current_blog_id);
 
         $wpdb->query('START TRANSACTION');
 
@@ -2462,15 +2251,7 @@ class TGS_Transfer_Ajax
                         ], ['global_product_lot_id' => $lot_id]);
                     }
                 } else {
-                    // Cộng lại tồn kho không tracking
-                    $quantity = floatval($item->quantity);
-
-                    $wpdb->query($wpdb->prepare("
-                        UPDATE {$products_table}
-                        SET local_product_quantity_no_tracking = local_product_quantity_no_tracking + %f,
-                            updated_at = %s
-                        WHERE local_product_name_id = %d
-                    ", $quantity, current_time('mysql'), $item->local_product_name_id));
+                    // Không ghi tồn vào catalog local. Tồn non-tracking được tính từ ledger/API theo SKU.
                 }
             }
 
@@ -2539,8 +2320,7 @@ class TGS_Transfer_Ajax
 
         $ledger_table = $wpdb->prefix . 'local_ledger';
         $ledger_item_table = $wpdb->prefix . 'local_ledger_item';
-        $products_table = $wpdb->prefix . 'local_product_name';
-        $lots_table = 'wp_global_product_lots';
+        $lots_table = TGS_TABLE_GLOBAL_PRODUCT_LOTS;
 
         // Lấy thông tin phiếu con nhập (type 1 = PURCHASE)
         $child_ledger = $wpdb->get_row($wpdb->prepare("
@@ -2576,12 +2356,12 @@ class TGS_Transfer_Ajax
 
         // Lấy các item từ phiếu con nhập (chính là ledger_id được gửi lên)
         $items = $wpdb->get_results($wpdb->prepare("
-            SELECT li.*, p.local_product_name, p.local_product_is_tracking
+            SELECT li.*
             FROM {$ledger_item_table} li
-            JOIN {$products_table} p ON li.local_product_name_id = p.local_product_name_id
             WHERE li.local_ledger_id = %d
             AND (li.is_deleted = 0 OR li.is_deleted IS NULL)
         ", $ledger_id));
+        $items = TGS_Transfer_Global_Products::enrich_ledger_items($items, $current_blog_id);
 
         // Tìm transfer_ledger để biết phiếu xuất gốc (dùng parent_ledger_id)
         $local_transfer_table = $wpdb->prefix . 'transfer_ledger';
