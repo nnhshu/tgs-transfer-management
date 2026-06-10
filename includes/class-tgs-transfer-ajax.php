@@ -358,6 +358,56 @@ class TGS_Transfer_Ajax
         return $result;
     }
 
+    private static function parse_nullable_float($value)
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $value = trim($value);
+            if ($value === '') {
+                return null;
+            }
+        }
+
+        return is_numeric($value) ? floatval($value) : null;
+    }
+
+    /**
+     * Copy snapshot DVT/kg từ item nguồn sang item đích.
+     * Nếu nhận một phần, scale SL DVT và tổng kg theo quantity thực nhận.
+     */
+    private static function build_copied_unit_snapshot($source_item, $target_quantity, $source_quantity)
+    {
+        $target_quantity = floatval($target_quantity);
+        $source_quantity = floatval($source_quantity);
+
+        $unit_ratio = self::parse_nullable_float($source_item->local_ledger_item_unit_ratio ?? null);
+        if ($unit_ratio === null || $unit_ratio <= 0) {
+            $unit_ratio = 1.0;
+        }
+
+        $unit_quantity = self::parse_nullable_float($source_item->local_ledger_item_unit_quantity ?? null);
+        if ($unit_quantity !== null && $source_quantity > 0 && abs($target_quantity - $source_quantity) > 0.0001) {
+            $unit_quantity = $unit_quantity * ($target_quantity / $source_quantity);
+        } elseif ($unit_quantity === null && $target_quantity > 0 && $unit_ratio > 0) {
+            $unit_quantity = $target_quantity / $unit_ratio;
+        }
+
+        $total_weight_kg = self::parse_nullable_float($source_item->local_ledger_item_total_weight_kg ?? null);
+        if ($total_weight_kg !== null && $source_quantity > 0 && abs($target_quantity - $source_quantity) > 0.0001) {
+            $total_weight_kg = $total_weight_kg * ($target_quantity / $source_quantity);
+        }
+
+        return [
+            'unit_quantity' => $unit_quantity,
+            'unit_ratio' => $unit_ratio,
+            'unit_name' => $source_item->local_ledger_item_unit_name ?? ($source_item->local_product_unit ?? ''),
+            'total_weight_kg' => $total_weight_kg,
+        ];
+    }
+
     /**
      * Ghi batch_movement records cho transfer.
      *
@@ -644,19 +694,16 @@ class TGS_Transfer_Ajax
             }
         }
 
-        // Build lookup maps: sku => import_quantity và sku => selected_lots
-        $import_quantities = [];
-        $selected_lots_map = [];
-        $item_notes_map = [];
+        // Build lookup maps. Ưu tiên source_ledger_item_id để tách đúng hàng chính/hàng tặng cùng SKU.
+        $custom_items_by_source_id = [];
+        $custom_items_by_sku = [];
         foreach ($custom_items as $ci) {
-            if (isset($ci['sku']) && isset($ci['import_quantity'])) {
-                $import_quantities[$ci['sku']] = intval($ci['import_quantity']);
+            $source_item_id = intval($ci['source_ledger_item_id'] ?? 0);
+            if ($source_item_id > 0) {
+                $custom_items_by_source_id[$source_item_id] = $ci;
             }
-            if (isset($ci['sku']) && isset($ci['selected_lots']) && is_array($ci['selected_lots'])) {
-                $selected_lots_map[$ci['sku']] = $ci['selected_lots'];
-            }
-            if (isset($ci['sku']) && isset($ci['item_note'])) {
-                $item_notes_map[$ci['sku']] = sanitize_textarea_field($ci['item_note']);
+            if (!empty($ci['sku'])) {
+                $custom_items_by_sku[$ci['sku']] = $ci;
             }
         }
 
@@ -766,11 +813,15 @@ class TGS_Transfer_Ajax
 
             foreach ($source_items as $source_item) {
                 $sku = TGS_Transfer_Global_Products::row_sku((array) $source_item);
+                $source_item_id = intval($source_item->local_ledger_item_id ?? 0);
+                $custom_item = $source_item_id > 0 && isset($custom_items_by_source_id[$source_item_id])
+                    ? $custom_items_by_source_id[$source_item_id]
+                    : ($custom_items_by_sku[$sku] ?? []);
                 $is_tracking = intval($source_item->local_product_is_tracking) === 1;
                 $max_quantity = intval($source_item->quantity);
 
-                $import_quantity = isset($import_quantities[$sku])
-                    ? intval($import_quantities[$sku])
+                $import_quantity = isset($custom_item['import_quantity'])
+                    ? intval($custom_item['import_quantity'])
                     : $max_quantity;
 
                 // Xử lý lot_ids cho tracking products
@@ -778,9 +829,9 @@ class TGS_Transfer_Ajax
                 if ($is_tracking && !empty($source_item->list_product_lots)) {
                     $all_lot_ids = json_decode($source_item->list_product_lots, true) ?: [];
 
-                    if (isset($selected_lots_map[$sku]) && !empty($selected_lots_map[$sku])) {
+                    if (isset($custom_item['selected_lots']) && is_array($custom_item['selected_lots']) && !empty($custom_item['selected_lots'])) {
                         $lot_ids_to_import = array_values(array_intersect(
-                            $selected_lots_map[$sku],
+                            $custom_item['selected_lots'],
                             $all_lot_ids
                         ));
                         $import_quantity = count($lot_ids_to_import);
@@ -826,7 +877,11 @@ class TGS_Transfer_Ajax
 
                 $total_amount += $subtotal;
 
-                $item_note = $item_notes_map[$sku] ?? ($source_item->local_ledger_item_note ?? '');
+                $item_note = isset($custom_item['item_note'])
+                    ? sanitize_textarea_field($custom_item['item_note'])
+                    : ($source_item->local_ledger_item_note ?? '');
+                $unit_snapshot = self::build_copied_unit_snapshot($source_item, $import_quantity, $max_quantity);
+                $is_gift = intval($source_item->local_ledger_item_gift_type ?? 0) === 1;
 
                 $import_items_data[] = [
                     'product_id' => $global_product_id,
@@ -840,6 +895,7 @@ class TGS_Transfer_Ajax
                     'subtotal' => $subtotal,
                     'lot_barcodes' => $lot_barcodes_to_import,
                     'is_tracking' => $is_tracking,
+                    'is_gift' => $is_gift ? 1 : 0,
                     'source_item' => $source_item,
                     'local_product' => $source_item,
                     'max_quantity' => $max_quantity,
@@ -847,6 +903,10 @@ class TGS_Transfer_Ajax
                     'batch_id' => self::resolve_batch_id_for_item($source_item, $is_tracking),
                     'sku' => $sku,
                     'unit' => $source_item->local_product_unit ?? '',
+                    'unit_quantity' => $unit_snapshot['unit_quantity'],
+                    'unit_ratio' => $unit_snapshot['unit_ratio'],
+                    'unit_name' => $unit_snapshot['unit_name'],
+                    'total_weight_kg' => $unit_snapshot['total_weight_kg'],
                     'doc_quantity' => floatval($source_item->local_ledger_item_doc_quantity ?? 0),
                     'software_source' => $source_item->local_ledger_item_software_source ?? $source_ledger_software_source,
                 ];

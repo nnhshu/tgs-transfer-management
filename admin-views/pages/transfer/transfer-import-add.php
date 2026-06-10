@@ -366,8 +366,12 @@ jQuery(document).ready(function($) {
     let docFilesList = [];
 
     // Lưu trữ dữ liệu nhập cho từng sản phẩm
-    // Key = sku, Value = { quantity, selectedLots: [] }
+    // Key = source ledger item id, fallback sku. Tách đúng hàng chính/hàng tặng cùng SKU.
     let importData = {};
+
+    function getItemKey(item) {
+        return String((item && (item.local_ledger_item_id || item.ledger_item_id || item.sku)) || '').trim();
+    }
 
     // Modal state
     let currentModalSku = null;
@@ -408,6 +412,7 @@ jQuery(document).ready(function($) {
 
                     // Initialize import data - LUÔN lấy full (không có nhập 1 phần)
                     productsData.forEach(function(item) {
+                        const itemKey = getItemKey(item);
                         const sku = item.sku || '';
                         const isTracking = item.is_tracking == 1;
                         const maxQty = parseInt(item.quantity) || 0;
@@ -415,7 +420,7 @@ jQuery(document).ready(function($) {
                         if (isTracking) {
                             let lotsDetail = item.lots_detail || [];
                             // Luôn chọn tất cả lots
-                            importData[sku] = {
+                            importData[itemKey] = {
                                 isTracking: true,
                                 maxQuantity: maxQty,
                                 allLots: lotsDetail,
@@ -433,7 +438,7 @@ jQuery(document).ready(function($) {
                             });
                         } else {
                             // Không tracking - luôn full quantity
-                            importData[sku] = {
+                            importData[itemKey] = {
                                 isTracking: false,
                                 maxQuantity: maxQty,
                                 allLots: [],
@@ -549,10 +554,11 @@ jQuery(document).ready(function($) {
         let needsSync = 0;
 
         productsData.forEach(function(item, index) {
+            const itemKey = getItemKey(item);
             const sku = item.sku || '';
             const isTracking = item.is_tracking == 1;
             const maxQty = parseInt(item.quantity) || 0;
-            const data = importData[sku] || {};
+            const data = importData[itemKey] || {};
             const importQty = data.quantity || 0;
 
             // Lấy thông tin giá/thuế từ item (từ local_ledger_item)
@@ -578,6 +584,7 @@ jQuery(document).ready(function($) {
                 const totalCount = (data.allLots || []).length;
                 lotColumn = `
                     <button type="button" class="btn btn-sm btn-outline-primary btn-select-lots"
+                            data-key="${escapeHtml(itemKey)}"
                             data-sku="${escapeHtml(sku)}"
                             data-product-name="${escapeHtml(item.product_name)}">
                         <i class="bx bx-check-shield"></i> Kiểm ${totalCount} mã
@@ -596,6 +603,7 @@ jQuery(document).ready(function($) {
             const docQtyForCompare = parseFloat(item.local_ledger_item_doc_quantity) || 0;
             html += `
                 <tr data-sku="${escapeHtml(sku)}" data-max="${maxQty}" data-tracking="${isTracking ? 1 : 0}"
+                    data-key="${escapeHtml(itemKey)}"
                     data-price="${price}" data-tax-percent="${taxPercent}" data-discount-percent="${discountPercent}"
                     data-subtotal-no-vat="${subtotalNoVat}" data-tax-amount="${taxAmount}" data-subtotal="${subtotal}"
                     data-import-qty="${importQty}" data-doc-qty="${docQtyForCompare}"
@@ -647,9 +655,10 @@ jQuery(document).ready(function($) {
         let totalAmount = 0;
 
         productsData.forEach(function(item) {
+            const itemKey = getItemKey(item);
             const sku = item.sku || '';
             const maxQty = parseInt(item.quantity) || 0;
-            const data = importData[sku] || {};
+            const data = importData[itemKey] || {};
             const importQty = data.quantity || 0;
 
             const price = parseFloat(item.price) || 0;
@@ -687,14 +696,15 @@ jQuery(document).ready(function($) {
 
     // LOT MODAL
     $(document).on('click', '.btn-select-lots', function() {
+        const itemKey = String($(this).data('key') || '');
         const sku = $(this).data('sku');
         const productName = $(this).data('product-name');
-        const data = importData[sku];
+        const data = importData[itemKey];
 
         if (!data) return;
 
         // Set modal state
-        currentModalSku = sku;
+        currentModalSku = itemKey;
         currentModalLots = data.allLots || [];
 
         // Update modal UI
@@ -965,7 +975,7 @@ jQuery(document).ready(function($) {
                 btn.prop('disabled', false).text('Lưu');
                 if (response.success) {
                     // Cập nhật button trên bảng chính
-                    $(`.btn-select-lots[data-sku="${currentModalSku}"]`)
+                    $(`.btn-select-lots[data-key="${currentModalSku}"]`)
                         .removeClass('btn-outline-primary').addClass('btn-success').text('Đã kiểm');
 
                     // Đóng modal
@@ -990,8 +1000,9 @@ jQuery(document).ready(function($) {
     function buildItemsData() {
         const items = [];
         productsData.forEach(function(item) {
+            const itemKey = getItemKey(item);
             const sku = item.sku || '';
-            const data = importData[sku];
+            const data = importData[itemKey];
 
             if (!data || data.quantity <= 0) return;
 
