@@ -15,6 +15,7 @@ if (!defined('ABSPATH')) {
 
 // Mismatch confirm modal + JS helper (TgsTransferMismatch)
 require_once dirname(__DIR__, 2) . '/partials/transfer-mismatch-confirm.php';
+require_once dirname(__DIR__, 2) . '/partials/transfer-receive-items-table.php';
 
 $ajax_url = admin_url('admin-ajax.php');
 $nonce = wp_create_nonce('tgs_transfer_nonce');
@@ -143,63 +144,39 @@ if (!$transfer_id) {
         </div>
 
         <!-- Row 2: Products Table (full width) -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">Sản phẩm mua</h5>
-                        <span class="badge bg-secondary" id="productCount">0 sản phẩm</span>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0" id="productsTable">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 3%;">#</th>
-                                        <th style="width: 14%;">Sản phẩm</th>
-                                        <th style="width: 8%;">SKU</th>
-                                        <th style="width: 5%;">SL tối đa</th>
-                                        <th style="width: 10%;">Mã định danh</th>
-                                        <th style="width: 5%;">SL nhập</th>
-                                        <th style="width: 5%;" title="Số lượng từ chứng từ gốc">SL CT</th>
-                                        <th style="width: 8%;">Đơn giá</th>
-                                        <th style="width: 8%;">TT không VAT</th>
-                                        <th style="width: 5%;">CK(%)</th>
-                                        <th style="width: 5%;">Thuế %</th>
-                                        <th style="width: 7%;">Thuế VNĐ</th>
-                                        <th style="width: 8%;">Thành tiền</th>
-                                        <th style="width: 10%;">Ghi chú SP</th>
-                                        <th style="width: 6%;">Trạng thái</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="productsTableBody">
-                                    <tr>
-                                        <td colspan="15" class="text-center py-4 text-muted">
-                                            Đang tải sản phẩm...
-                                        </td>
-                                    </tr>
-                                </tbody>
-                                <tfoot class="table-light" id="productsTableFoot" style="display: none;">
-                                    <tr>
-                                        <td colspan="5" class="text-end fw-semibold">Tổng cộng:</td>
-                                        <td class="fw-semibold" id="footTotalImport">0</td>
-                                        <td></td>
-                                        <td></td>
-                                        <td class="fw-semibold" id="footTotalNoVat">0 đ</td>
-                                        <td></td>
-                                        <td></td>
-                                        <td class="fw-semibold text-danger" id="footTotalTax">0 đ</td>
-                                        <td class="fw-semibold text-primary" id="footTotalAmount">0 đ</td>
-                                        <td></td>
-                                        <td id="footStatus">—</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <?php
+        tgs_transfer_render_receive_items_card([
+            'row_id' => 'mainProductsRow',
+            'card_id' => 'mainProductsCard',
+            'title' => 'Sản phẩm mua',
+            'count_id' => 'productCount',
+            'count_text' => '0 sản phẩm',
+            'table_id' => 'productsTable',
+            'tbody_id' => 'productsTableBody',
+            'tfoot_id' => 'productsTableFoot',
+            'foot_prefix' => 'foot',
+            'quantity_label' => 'SL nhập',
+            'loading_text' => 'Đang tải sản phẩm...',
+            'footer_label' => 'Tổng hàng chính:',
+        ]);
+
+        tgs_transfer_render_receive_items_card([
+            'row_id' => 'giftProductsRow',
+            'card_id' => 'giftProductsCard',
+            'title' => 'Hàng tặng kèm',
+            'count_id' => 'giftProductCount',
+            'count_text' => '0 hàng tặng',
+            'badge_class' => 'bg-success',
+            'header_class' => 'bg-success bg-opacity-10',
+            'table_id' => 'giftProductsTable',
+            'tbody_id' => 'giftProductsTableBody',
+            'tfoot_id' => 'giftProductsTableFoot',
+            'foot_prefix' => 'giftFoot',
+            'quantity_label' => 'SL nhập',
+            'loading_text' => 'Đang tải hàng tặng...',
+            'footer_label' => 'Tổng hàng tặng:',
+        ]);
+        ?>
 
         <!-- Row 3: Actions (sticky bottom) -->
         <div class="row">
@@ -225,6 +202,10 @@ if (!$transfer_id) {
                                     <div>
                                         <span class="text-muted">Tổng số lượng:</span>
                                         <span class="fw-bold ms-1" id="summaryQuantity">0</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-muted">Tổng kg:</span>
+                                        <span class="fw-bold text-info ms-1" id="summaryWeight">—</span>
                                     </div>
                                     <div>
                                         <span class="text-muted">Tổng giá trị:</span>
@@ -360,6 +341,8 @@ jQuery(document).ready(function($) {
     const ajaxUrl = '<?php echo esc_js($ajax_url); ?>';
     const nonce = '<?php echo esc_js($nonce); ?>';
     const transferId = <?php echo intval($transfer_id); ?>;
+    const receiveDoneLabel = 'Nhập hết';
+    const syncTargetLabel = 'phiếu mua';
 
     let transferData = null;
     let productsData = [];
@@ -415,7 +398,7 @@ jQuery(document).ready(function($) {
                         const itemKey = getItemKey(item);
                         const sku = item.sku || '';
                         const isTracking = item.is_tracking == 1;
-                        const maxQty = parseInt(item.quantity) || 0;
+                        const maxQty = parseFloat(item.quantity) || 0;
 
                         if (isTracking) {
                             let lotsDetail = item.lots_detail || [];
@@ -544,41 +527,132 @@ jQuery(document).ready(function($) {
         $('#docFilesList').html(html);
     }
 
-    function renderProducts() {
-        if (!productsData || productsData.length === 0) {
-            $('#productsTableBody').html('<tr><td colspan="15" class="text-center py-4 text-muted">Không có sản phẩm</td></tr>');
+    function isGiftItem(item) {
+        return parseInt(item.local_ledger_item_gift_type ?? item.gift_type ?? item.is_gift ?? 0, 10) === 1;
+    }
+
+    function getItemsByGift(isGift) {
+        return (productsData || []).filter(item => isGiftItem(item) === isGift);
+    }
+
+    function firstFilled(item, keys) {
+        for (const key of keys) {
+            if (item[key] !== undefined && item[key] !== null && item[key] !== '') {
+                return item[key];
+            }
+        }
+        return '';
+    }
+
+    function toNumber(value) {
+        const n = parseFloat(value);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function formatQuantity(value) {
+        const n = parseFloat(value);
+        if (!Number.isFinite(n)) return '0';
+        return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(n);
+    }
+
+    function formatKg(value) {
+        const n = parseFloat(value);
+        if (!Number.isFinite(n)) return '—';
+        return formatQuantity(n) + ' kg';
+    }
+
+    function readUnitSnapshot(item, targetQty) {
+        const sourceQty = toNumber(item.quantity) || 0;
+        const ratioRaw = toNumber(firstFilled(item, ['local_ledger_item_unit_ratio', 'unit_ratio']));
+        const ratio = ratioRaw && ratioRaw > 0 ? ratioRaw : 1;
+        let unitQty = toNumber(firstFilled(item, ['local_ledger_item_unit_quantity', 'unit_quantity']));
+        let totalWeight = toNumber(firstFilled(item, ['local_ledger_item_total_weight_kg', 'total_weight_kg']));
+
+        if (unitQty === null && targetQty > 0 && ratio > 0) {
+            unitQty = targetQty / ratio;
+        } else if (unitQty !== null && sourceQty > 0 && Math.abs(targetQty - sourceQty) > 0.0001) {
+            unitQty = unitQty * (targetQty / sourceQty);
+        }
+
+        if (totalWeight !== null && sourceQty > 0 && Math.abs(targetQty - sourceQty) > 0.0001) {
+            totalWeight = totalWeight * (targetQty / sourceQty);
+        }
+
+        let unitWeight = toNumber(firstFilled(item, ['local_ledger_item_unit_weight_kg', 'unit_weight_kg']));
+        if (unitWeight === null && totalWeight !== null && unitQty && unitQty > 0) {
+            unitWeight = totalWeight / unitQty;
+        }
+
+        const unitName = String(firstFilled(item, [
+            'local_ledger_item_unit_name',
+            'unit_name',
+            'unit',
+            'local_product_unit',
+            'global_product_unit'
+        ]) || 'ĐV nhỏ nhất');
+
+        return {
+            unitName,
+            ratio,
+            unitQty,
+            unitWeight,
+            totalWeight,
+            note: '1 ' + unitName + ' = ' + formatQuantity(ratio) + ' đv nhỏ nhất'
+        };
+    }
+
+    function renderUnitCell(snapshot) {
+        return `
+            <div class="fw-semibold">${escapeHtml(snapshot.unitName)}</div>
+            <small class="text-muted">${escapeHtml(snapshot.note)}</small>
+        `;
+    }
+
+    function renderWeightCell(snapshot) {
+        if (snapshot.totalWeight === null) {
+            return '<span class="text-muted small">—</span>';
+        }
+        const unitNote = snapshot.unitWeight !== null
+            ? `<br><small class="text-muted">1 ${escapeHtml(snapshot.unitName)} ≈ ${formatKg(snapshot.unitWeight)}</small>`
+            : '';
+        return `<span class="fw-semibold text-info">${formatKg(snapshot.totalWeight)}</span>${unitNote}`;
+    }
+
+    function calculateItemTotals(item, importQty) {
+        const price = parseFloat(item.price) || 0;
+        const taxPercent = parseFloat(item.local_ledger_item_tax_percent) || 0;
+        const discountPercent = parseFloat(item.local_ledger_item_discount) || 0;
+        const subtotalNoVat = importQty * price;
+        const discountAmount = Math.round(subtotalNoVat * (discountPercent / 100));
+        const afterDiscount = subtotalNoVat - discountAmount;
+        const taxAmount = Math.round(afterDiscount * (taxPercent / 100));
+        const subtotal = Math.round(afterDiscount + taxAmount);
+
+        return { price, taxPercent, discountPercent, subtotalNoVat, taxAmount, subtotal };
+    }
+
+    function renderProductRows(items, options) {
+        const $tbody = $(options.bodySelector);
+        if (!items || items.length === 0) {
+            $tbody.html('<tr><td colspan="18" class="text-center py-4 text-muted">' + options.emptyMessage + '</td></tr>');
+            $(options.countSelector).text('0 ' + options.countUnit);
             return;
         }
 
         let html = '';
-        let needsSync = 0;
-
-        productsData.forEach(function(item, index) {
+        items.forEach(function(item, index) {
             const itemKey = getItemKey(item);
             const sku = item.sku || '';
             const isTracking = item.is_tracking == 1;
-            const maxQty = parseInt(item.quantity) || 0;
+            const maxQty = parseFloat(item.quantity) || 0;
             const data = importData[itemKey] || {};
-            const importQty = data.quantity || 0;
-
-            // Lấy thông tin giá/thuế từ item (từ local_ledger_item)
-            const price = parseFloat(item.price) || 0;
-            const taxPercent = parseFloat(item.local_ledger_item_tax_percent) || 0;
-            const discountPercent = parseFloat(item.local_ledger_item_discount) || 0;
+            const importQty = parseFloat(data.quantity) || 0;
+            const totals = calculateItemTotals(item, importQty);
+            const snapshot = readUnitSnapshot(item, importQty);
             const itemNote = item.local_ledger_item_note || '';
+            const docQtyForCompare = parseFloat(item.local_ledger_item_doc_quantity) || 0;
+            const giftBadge = isGiftItem(item) ? '<br><span class="badge bg-warning text-dark badge-sm">Hàng tặng</span>' : '';
 
-            // Tính toán giống như trang xuất (có làm tròn như ticket-create-base.js)
-            const subtotalNoVat = importQty * price;
-            const discountAmount = Math.round(subtotalNoVat * (discountPercent / 100));
-            const afterDiscount = subtotalNoVat - discountAmount;
-            const taxAmount = Math.round(afterDiscount * (taxPercent / 100));
-            const subtotal = Math.round(afterDiscount + taxAmount);
-
-            if (!item.synced_in_destination) {
-                needsSync++;
-            }
-
-            // Cột mã định danh
             let lotColumn;
             if (isTracking) {
                 const totalCount = (data.allLots || []).length;
@@ -594,18 +668,11 @@ jQuery(document).ready(function($) {
                 lotColumn = '<span class="text-muted">—</span>';
             }
 
-            // Cột số lượng nhập - LUÔN hiển thị readonly vì nhập hết
-            let qtyColumn = `<span class="fw-semibold">${importQty}</span>`;
-
-            // Trạng thái - luôn là "Nhập hết" vì không có nhập 1 phần
-            const itemStatus = '<span class="badge bg-success">Nhập hết</span>';
-
-            const docQtyForCompare = parseFloat(item.local_ledger_item_doc_quantity) || 0;
             html += `
                 <tr data-sku="${escapeHtml(sku)}" data-max="${maxQty}" data-tracking="${isTracking ? 1 : 0}"
                     data-key="${escapeHtml(itemKey)}"
-                    data-price="${price}" data-tax-percent="${taxPercent}" data-discount-percent="${discountPercent}"
-                    data-subtotal-no-vat="${subtotalNoVat}" data-tax-amount="${taxAmount}" data-subtotal="${subtotal}"
+                    data-price="${totals.price}" data-tax-percent="${totals.taxPercent}" data-discount-percent="${totals.discountPercent}"
+                    data-subtotal-no-vat="${totals.subtotalNoVat}" data-tax-amount="${totals.taxAmount}" data-subtotal="${totals.subtotal}"
                     data-import-qty="${importQty}" data-doc-qty="${docQtyForCompare}"
                     data-product-name="${escapeHtml(item.product_name || '')}">
                     <td>${index + 1}</td>
@@ -613,85 +680,146 @@ jQuery(document).ready(function($) {
                         <strong>${escapeHtml(item.product_name)}</strong>
                         <br><small class="text-muted">Barcode: ${escapeHtml(item.barcode || '—')}</small>
                         ${isTracking ? '<br><span class="badge bg-info badge-sm">Theo HSD</span>' : ''}
+                        ${giftBadge}
                     </td>
                     <td><code>${escapeHtml(sku)}</code></td>
-                    <td class="text-center"><strong>${maxQty}</strong></td>
+                    <td class="text-center"><strong>${formatQuantity(maxQty)}</strong></td>
                     <td class="text-center">${lotColumn}</td>
-                    <td class="text-center">${qtyColumn}</td>
-                    <td class="text-center"><span class="text-primary small fw-semibold" title="Số lượng có trong chứng từ gốc">${parseFloat(item.local_ledger_item_doc_quantity) > 0 ? parseFloat(item.local_ledger_item_doc_quantity) : '—'}</span></td>
-                    <td class="text-end">${formatCurrency(price)}</td>
-                    <td class="text-end">${formatCurrency(subtotalNoVat)}</td>
-                    <td class="text-center">${discountPercent > 0 ? discountPercent + '%' : '—'}</td>
-                    <td class="text-center">${taxPercent}%</td>
-                    <td class="text-end text-danger">${formatCurrency(taxAmount)}</td>
-                    <td class="text-end fw-semibold">${formatCurrency(subtotal)}</td>
+                    <td>${renderUnitCell(snapshot)}</td>
+                    <td class="text-center"><span class="fw-semibold">${snapshot.unitQty !== null ? formatQuantity(snapshot.unitQty) : '—'}</span></td>
+                    <td class="text-center"><span class="fw-semibold">${formatQuantity(importQty)}</span></td>
+                    <td class="text-center"><span class="text-primary small fw-semibold" title="Số lượng có trong chứng từ gốc">${docQtyForCompare > 0 ? formatQuantity(docQtyForCompare) : '—'}</span></td>
+                    <td class="text-center">${renderWeightCell(snapshot)}</td>
+                    <td class="text-end">${formatCurrency(totals.price)}</td>
+                    <td class="text-end">${formatCurrency(totals.subtotalNoVat)}</td>
+                    <td class="text-center">${totals.discountPercent > 0 ? totals.discountPercent + '%' : '—'}</td>
+                    <td class="text-center">${totals.taxPercent}%</td>
+                    <td class="text-end text-danger">${formatCurrency(totals.taxAmount)}</td>
+                    <td class="text-end fw-semibold">${formatCurrency(totals.subtotal)}</td>
                     <td><span class="text-muted small">${escapeHtml(itemNote) || '—'}</span></td>
-                    <td class="item-status">${itemStatus}</td>
+                    <td class="item-status"><span class="badge bg-success">${receiveDoneLabel}</span></td>
                 </tr>
             `;
         });
 
-        $('#productsTableBody').html(html);
-        $('#productCount').text(productsData.length + ' sản phẩm');
-        $('#productsTableFoot').show();
+        $tbody.html(html);
+        $(options.countSelector).text(items.length + ' ' + options.countUnit);
+    }
 
-        // Đánh dấu các dòng lệch SL nhập vs SL chứng từ
+    function renderProducts() {
+        const mainItems = getItemsByGift(false);
+        const giftItems = getItemsByGift(true);
+
+        renderProductRows(mainItems, {
+            bodySelector: '#productsTableBody',
+            countSelector: '#productCount',
+            countUnit: 'sản phẩm',
+            emptyMessage: 'Không có sản phẩm mua'
+        });
+
+        renderProductRows(giftItems, {
+            bodySelector: '#giftProductsTableBody',
+            countSelector: '#giftProductCount',
+            countUnit: 'hàng tặng',
+            emptyMessage: 'Không có hàng tặng từ phiếu nguồn'
+        });
+
         if (window.TgsTransferMismatch) {
             window.TgsTransferMismatch.markRows('#productsTableBody');
+            window.TgsTransferMismatch.markRows('#giftProductsTableBody');
         }
 
-        // Show sync warning
+        const needsSync = (productsData || []).filter(item => !item.synced_in_destination).length;
         if (needsSync > 0) {
-            $('#warningSyncText').text(needsSync + ' sản phẩm sẽ được tự động đồng bộ khi tạo phiếu mua.');
+            $('#warningSyncText').text(needsSync + ' sản phẩm sẽ được tự động đồng bộ khi tạo ' + syncTargetLabel + '.');
             $('#warningSync').show();
+        } else {
+            $('#warningSync').hide();
         }
     }
 
-    function updateSummary() {
-        let totalMax = 0;
-        let totalImport = 0;
-        let totalNoVat = 0;
-        let totalTax = 0;
-        let totalAmount = 0;
+    function calculateTotals(items) {
+        const totals = {
+            totalMax: 0,
+            totalImport: 0,
+            totalUnitQty: 0,
+            hasUnitQty: false,
+            totalWeight: 0,
+            hasWeight: false,
+            totalNoVat: 0,
+            totalTax: 0,
+            totalAmount: 0
+        };
 
-        productsData.forEach(function(item) {
+        (items || []).forEach(function(item) {
             const itemKey = getItemKey(item);
-            const sku = item.sku || '';
-            const maxQty = parseInt(item.quantity) || 0;
+            const maxQty = parseFloat(item.quantity) || 0;
             const data = importData[itemKey] || {};
-            const importQty = data.quantity || 0;
+            const importQty = parseFloat(data.quantity) || 0;
+            const itemTotals = calculateItemTotals(item, importQty);
+            const snapshot = readUnitSnapshot(item, importQty);
 
-            const price = parseFloat(item.price) || 0;
-            const taxPercent = parseFloat(item.local_ledger_item_tax_percent) || 0;
-            const discountPercent = parseFloat(item.local_ledger_item_discount) || 0;
+            totals.totalMax += maxQty;
+            totals.totalImport += importQty;
+            totals.totalNoVat += itemTotals.subtotalNoVat;
+            totals.totalTax += itemTotals.taxAmount;
+            totals.totalAmount += itemTotals.subtotal;
 
-            // Tính toán giống như trang xuất (có làm tròn như ticket-create-base.js)
-            const subtotalNoVat = importQty * price;
-            const discountAmount = Math.round(subtotalNoVat * (discountPercent / 100));
-            const afterDiscount = subtotalNoVat - discountAmount;
-            const taxAmount = Math.round(afterDiscount * (taxPercent / 100));
-            const subtotal = Math.round(afterDiscount + taxAmount);
-
-            totalMax += maxQty;
-            totalImport += importQty;
-            totalNoVat += subtotalNoVat;
-            totalTax += taxAmount;
-            totalAmount += subtotal;
+            if (snapshot.unitQty !== null) {
+                totals.hasUnitQty = true;
+                totals.totalUnitQty += snapshot.unitQty;
+            }
+            if (snapshot.totalWeight !== null) {
+                totals.hasWeight = true;
+                totals.totalWeight += snapshot.totalWeight;
+            }
         });
 
-        $('#footTotalImport').text(totalImport + ' / ' + totalMax);
-        $('#footTotalNoVat').text(formatCurrency(totalNoVat));
-        $('#footTotalTax').text(formatCurrency(totalTax));
-        $('#footTotalAmount').text(formatCurrency(totalAmount));
+        return totals;
+    }
 
-        // Trạng thái tổng - luôn là "Nhập hết"
-        $('#footStatus').html('<span class="badge bg-success">Nhập hết</span>');
-        $('#btnCreateImport').prop('disabled', totalImport === 0);
+    function updateTableFooter(items, prefix) {
+        const totals = calculateTotals(items);
+        const hasRows = (items || []).length > 0;
 
-        // Cập nhật summary ở footer sticky
-        $('#summaryProducts').text(productsData.length);
-        $('#summaryQuantity').text(totalImport);
-        $('#summaryValue').text(formatCurrency(totalAmount));
+        $('#' + prefix + 'TotalUnitQty').text(totals.hasUnitQty ? formatQuantity(totals.totalUnitQty) : '—');
+        $('#' + prefix + 'TotalImport').text(formatQuantity(totals.totalImport) + ' / ' + formatQuantity(totals.totalMax));
+        $('#' + prefix + 'TotalWeight').text(totals.hasWeight ? formatKg(totals.totalWeight) : '—');
+        $('#' + prefix + 'TotalNoVat').text(formatCurrency(totals.totalNoVat));
+        $('#' + prefix + 'TotalTax').text(formatCurrency(totals.totalTax));
+        $('#' + prefix + 'TotalAmount').text(formatCurrency(totals.totalAmount));
+        $('#' + prefix + 'Status').html(hasRows ? '<span class="badge bg-success">' + receiveDoneLabel + '</span>' : '—');
+
+        if (prefix === 'foot') {
+            $('#productsTableFoot').toggle(hasRows);
+        } else {
+            $('#giftProductsTableFoot').toggle(hasRows);
+        }
+
+        return totals;
+    }
+
+    function mergeTotals(a, b) {
+        return {
+            totalImport: a.totalImport + b.totalImport,
+            totalAmount: a.totalAmount + b.totalAmount,
+            totalWeight: a.totalWeight + b.totalWeight,
+            hasWeight: a.hasWeight || b.hasWeight
+        };
+    }
+
+    function updateSummary() {
+        const mainItems = getItemsByGift(false);
+        const giftItems = getItemsByGift(true);
+        const mainTotals = updateTableFooter(mainItems, 'foot');
+        const giftTotals = updateTableFooter(giftItems, 'giftFoot');
+        const allTotals = mergeTotals(mainTotals, giftTotals);
+
+        $('#btnCreateImport').prop('disabled', allTotals.totalImport === 0);
+        $('#summaryProducts').text((productsData || []).length);
+        $('#summaryQuantity').text(formatQuantity(allTotals.totalImport));
+        $('#summaryWeight').text(allTotals.hasWeight ? formatKg(allTotals.totalWeight) : '—');
+        $('#summaryValue').text(formatCurrency(allTotals.totalAmount));
     }
 
     // LOT MODAL
@@ -1005,16 +1133,23 @@ jQuery(document).ready(function($) {
             const data = importData[itemKey];
 
             if (!data || data.quantity <= 0) return;
+            const unitSnapshot = readUnitSnapshot(item, parseFloat(data.quantity) || 0);
 
             items.push({
                 sku: sku,
                 max_quantity: data.maxQuantity,
                 import_quantity: data.quantity,
                 doc_quantity: parseFloat(item.local_ledger_item_doc_quantity) || 0,
+                is_gift: isGiftItem(item) ? 1 : 0,
                 is_tracking: data.isTracking,
                 selected_lots: data.isTracking ? data.selectedLots : [],
                 source_ledger_item_id: item.local_ledger_item_id || item.ledger_item_id,
-                item_note: item.local_ledger_item_note || ''
+                item_note: item.local_ledger_item_note || '',
+                unit_quantity: unitSnapshot.unitQty,
+                unit_ratio: unitSnapshot.ratio,
+                unit_name: unitSnapshot.unitName,
+                total_weight_kg: unitSnapshot.totalWeight,
+                unit_weight_kg: unitSnapshot.unitWeight
             });
         });
         return items;
