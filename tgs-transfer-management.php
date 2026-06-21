@@ -152,7 +152,6 @@ class TGS_Transfer_Management
     {
         // Views cho Mua bán nội bộ
         $transfer_views = [
-            'transfer-export-add',
             'ticket-transfer-exports',
             'ticket-transfer-export-detail',
             'transfer-pending-imports',
@@ -165,7 +164,6 @@ class TGS_Transfer_Management
 
         // Views cho Trả hàng nội bộ
         $return_views = [
-            'transfer-return-add',
             'ticket-internal-returns',
             'ticket-internal-return-detail',
             'transfer-pending-returns',
@@ -186,12 +184,6 @@ class TGS_Transfer_Management
                     <a href="<?php echo tgs_url('transfer-report'); ?>" class="menu-link">
                         <i class="bx bx-bar-chart-alt-2 text-primary me-1"></i>
                         <div>Báo cáo & Thống kê</div>
-                    </a>
-                </li>
-                <li class="menu-item <?php echo $current_view === 'transfer-export-add' ? 'active' : ''; ?>">
-                    <a href="<?php echo tgs_url('transfer-export-add'); ?>" class="menu-link">
-                        <i class="bx bx-share text-info me-1"></i>
-                        <div>Bán hàng nội bộ</div>
                     </a>
                 </li>
                 <li class="menu-item <?php echo in_array($current_view, ['ticket-transfer-exports', 'ticket-transfer-export-detail']) ? 'active' : ''; ?>">
@@ -222,12 +214,6 @@ class TGS_Transfer_Management
                 <div>Trả hàng nội bộ</div>
             </a>
             <ul class="menu-sub">
-                <li class="menu-item <?php echo $current_view === 'transfer-return-add' ? 'active' : ''; ?>">
-                    <a href="<?php echo tgs_url('transfer-return-add'); ?>" class="menu-link">
-                        <i class="bx bx-undo text-warning me-1"></i>
-                        <div>Trả hàng nội bộ</div>
-                    </a>
-                </li>
                 <li class="menu-item <?php echo in_array($current_view, ['ticket-internal-returns', 'ticket-internal-return-detail']) ? 'active' : ''; ?>">
                     <a href="<?php echo tgs_url('ticket-internal-returns'); ?>" class="menu-link">
                         <i class="bx bx-list-ul me-1"></i>
