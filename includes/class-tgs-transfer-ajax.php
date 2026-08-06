@@ -279,8 +279,53 @@ class TGS_Transfer_Ajax
                 'is_return' => $is_return
             ], $log_message);
 
+            /*
+             * ─── TỰ SINH PHIẾU MUA NỘI BỘ BÊN SHOP NHẬN ─────────────────────
+             *
+             * Đặt SAU COMMIT, cố ý. Việc duyệt xuất ở shop bán đã xong và đã ghi
+             * xuống DB; phần dưới đây thao tác trên database của SITE KHÁC nên
+             * không nằm chung transaction được — MySQL transaction chỉ bao được
+             * kết nối hiện tại, không bao chéo blog.
+             *
+             * Chỉ áp cho phiếu bán nội bộ. Phiếu TRẢ nội bộ có luồng nhận riêng
+             * (create_return_receive) với cấu hình khác, không gộp vào đây.
+             */
+            $auto_import = null;
+            if (!$is_return) {
+                $auto_import = self::auto_create_destination_import(
+                    $transfer,
+                    $destination_blog_id,
+                    $current_blog_id
+                );
+
+                if (is_array($auto_import) && empty($auto_import['ok'])) {
+                    /*
+                     * Không chặn việc duyệt: hàng đã trừ kho bên bán rồi. Ghi log
+                     * để truy được, shop nhận vẫn vào màn "Chờ mua nội bộ" bấm
+                     * tạo tay như luồng cũ.
+                     */
+                    TGS_Shop_Ticket_Helper::add_ticket_log($ledger_id, 'auto_import_failed', [
+                        'destination_blog_id' => $destination_blog_id,
+                        'error' => $auto_import['message'] ?? '',
+                    ], 'Không tự tạo được phiếu mua nội bộ bên shop nhận: ' . ($auto_import['message'] ?? ''));
+
+                    $success_message .= ' (Chưa tự tạo được phiếu bên shop mua, shop mua vào màn "Chờ mua nội bộ" tạo giúp.)';
+                } elseif (is_array($auto_import) && empty($auto_import['skipped'])) {
+                    $success_message .= ' Đã tự tạo phiếu mua nội bộ '
+                        . ($auto_import['ledger_code'] ?? '') . ' chờ shop mua duyệt.';
+
+                    TGS_Shop_Ticket_Helper::add_ticket_log($ledger_id, 'auto_import_created', [
+                        'destination_blog_id'   => $destination_blog_id,
+                        'dest_ledger_id'        => $auto_import['ledger_id'] ?? 0,
+                        'dest_ledger_code'      => $auto_import['ledger_code'] ?? '',
+                        'dest_auto_import_code' => $auto_import['auto_import_code'] ?? '',
+                    ], 'Tự tạo phiếu mua nội bộ bên shop nhận: ' . ($auto_import['ledger_code'] ?? ''));
+                }
+            }
+
             wp_send_json_success([
-                'message' => $success_message
+                'message' => $success_message,
+                'auto_import' => $auto_import,
             ]);
         } catch (Exception $e) {
 
@@ -669,20 +714,80 @@ class TGS_Transfer_Ajax
      *   - ticket_log_type: Loại ticket log
      *   - labels: Array các label error/success message
      */
-    private static function do_create_import_internal($config)
+    /*
+     * Chế độ chạy ngầm.
+     *
+     * Hàm do_create_import_internal() vốn chỉ dùng cho AJAX: đọc $_POST rồi kết
+     * thúc request bằng wp_send_json_*(). Nay nó còn được gọi thẳng từ
+     * approve_export() để tự sinh phiếu mua nội bộ bên shop nhận — mà
+     * wp_send_json_*() gọi wp_die(), tức là sẽ giết luôn cả request duyệt xuất
+     * đang chạy dở của shop bán.
+     *
+     * Cờ này quyết định cách "trả lời": bật thì trả về mảng cho code gọi tự xử,
+     * tắt thì giữ nguyên hành vi cũ.
+     */
+    private static $import_silent = false;
+
+    /** Trả lỗi: mảng khi chạy ngầm, JSON + kết thúc request khi qua AJAX */
+    private static function import_reply_error($message)
+    {
+        if (self::$import_silent) {
+            return ['ok' => false, 'message' => $message];
+        }
+        wp_send_json_error(['message' => $message]);
+    }
+
+    /** Trả thành công: tương tự import_reply_error() */
+    private static function import_reply_success($data)
+    {
+        if (self::$import_silent) {
+            return array_merge(['ok' => true], $data);
+        }
+        wp_send_json_success($data);
+    }
+
+    /**
+     * @param array      $config Cấu hình loại phiếu (import nội bộ / nhận trả)
+     * @param array|null $args   Truyền mảng để chạy ngầm, bỏ trống để đọc $_POST.
+     *                           Khoá: transfer_id, note, items, created_by_user_id
+     */
+    private static function do_create_import_internal($config, $args = null)
     {
         global $wpdb;
         $current_blog_id = get_current_blog_id();
-        $current_user_id = get_current_user_id();
 
-        $transfer_id      = intval($_POST['transfer_id'] ?? 0);
-        $import_note      = sanitize_textarea_field($_POST['note'] ?? $_POST['import_note'] ?? '');
-        $items_json       = isset($_POST['items']) ? wp_unslash($_POST['items']) : '';
+        $silent = is_array($args);
+        self::$import_silent = $silent;
+
+        /*
+         * Chạy ngầm thì người tạo là "hệ thống" (user_id = 0), KHÔNG mượn danh
+         * người vừa bấm duyệt bên shop bán: họ thường không có tài khoản ở shop
+         * nhận, ghi tên họ vào log bên đó là sai chủ thể.
+         */
+        $current_user_id = $silent
+            ? intval($args['created_by_user_id'] ?? 0)
+            : get_current_user_id();
+
+        $transfer_id = $silent
+            ? intval($args['transfer_id'] ?? 0)
+            : intval($_POST['transfer_id'] ?? 0);
+
+        $import_note = $silent
+            ? sanitize_textarea_field((string) ($args['note'] ?? ''))
+            : sanitize_textarea_field($_POST['note'] ?? $_POST['import_note'] ?? '');
+
+        // Bỏ trống items = nhận TOÀN BỘ theo số lượng gốc của phiếu xuất
+        $items_json = $silent
+            ? (string) ($args['items'] ?? '')
+            : (isset($_POST['items']) ? wp_unslash($_POST['items']) : '');
+
         // advance_meta: danh sách file chứng từ được copy từ shop nguồn
-        $advance_meta_raw = !empty($_POST['advance_meta']) ? wp_unslash($_POST['advance_meta']) : '';
+        $advance_meta_raw = (!$silent && !empty($_POST['advance_meta']))
+            ? wp_unslash($_POST['advance_meta'])
+            : '';
 
         if (!$transfer_id) {
-            wp_send_json_error(['message' => 'Thiếu ID transfer']);
+            return self::import_reply_error('Thiếu ID transfer');
         }
 
         // Parse items từ frontend (nếu có)
@@ -718,12 +823,12 @@ class TGS_Transfer_Ajax
         ", $transfer_id, $config['transfer_type']));
 
         if (!$local_transfer) {
-            wp_send_json_error(['message' => $config['labels']['transfer_not_found']]);
+            return self::import_reply_error($config['labels']['transfer_not_found']);
         }
 
         // Kiểm tra đã tạo phiếu đích chưa
         if (!empty($local_transfer->destination_ledger_id)) {
-            wp_send_json_error(['message' => $config['labels']['already_created']]);
+            return self::import_reply_error($config['labels']['already_created']);
         }
 
         $source_blog_id = intval($local_transfer->source_blog_id);
@@ -742,7 +847,7 @@ class TGS_Transfer_Ajax
 
         if (!$source_ledger) {
             restore_current_blog();
-            wp_send_json_error(['message' => $config['labels']['source_not_found']]);
+            return self::import_reply_error($config['labels']['source_not_found']);
         }
 
         // Kiểm tra phiếu xuất tự động (phiếu con) đã duyệt chưa
@@ -756,12 +861,12 @@ class TGS_Transfer_Ajax
         if ($auto_export_ledger) {
             if ($auto_export_ledger->local_ledger_approver_status != TGS_APPROVER_STATUS_APPROVED) {
                 restore_current_blog();
-                wp_send_json_error(['message' => $config['labels']['auto_export_not_approved']]);
+                return self::import_reply_error($config['labels']['auto_export_not_approved']);
             }
         } else {
             if ($source_ledger->local_ledger_approver_status != TGS_APPROVER_STATUS_APPROVED) {
                 restore_current_blog();
-                wp_send_json_error(['message' => $config['labels']['source_not_approved']]);
+                return self::import_reply_error($config['labels']['source_not_approved']);
             }
         }
 
@@ -791,7 +896,7 @@ class TGS_Transfer_Ajax
         restore_current_blog();
 
         if (empty($source_items)) {
-            wp_send_json_error(['message' => $config['labels']['no_items']]);
+            return self::import_reply_error($config['labels']['no_items']);
         }
 
         // Step 3: Quay về shop hiện tại để tạo phiếu
@@ -1080,7 +1185,7 @@ class TGS_Transfer_Ajax
                 ]);
             }
 
-            wp_send_json_success([
+            return self::import_reply_success([
                 'message' => $config['success_message'],
                 'ledger_id' => $parent_ledger_id,
                 'auto_import_ledger_id' => $auto_import_ledger_id,
@@ -1093,7 +1198,7 @@ class TGS_Transfer_Ajax
             ]);
         } catch (Exception $e) {
             $wpdb->query('ROLLBACK');
-            wp_send_json_error(['message' => $e->getMessage()]);
+            return self::import_reply_error($e->getMessage());
         }
     }
 
@@ -1106,7 +1211,19 @@ class TGS_Transfer_Ajax
         check_ajax_referer('tgs_transfer_nonce', 'nonce');
 
         // Gọi hàm dùng chung với config cho phiếu mua nội bộ
-        self::do_create_import_internal([
+        self::do_create_import_internal(self::internal_import_config());
+    }
+
+    /**
+     * Cấu hình phiếu mua nội bộ (MNB) + phiếu nhập tự động (AMN).
+     *
+     * Tách riêng vì nay có HAI đường gọi tới cùng cấu hình này:
+     *   - create_import()  : shop nhận tự bấm tạo ở màn "chờ mua nội bộ"
+     *   - auto_create_destination_import() : tự sinh khi shop bán duyệt xuất
+     */
+    private static function internal_import_config()
+    {
+        return [
             'transfer_type' => TGS_TRANSFER_TYPE_INTERNAL,        // 1
             'parent_ledger_type' => TGS_LEDGER_TYPE_TRANSFER_IMPORT, // 13
             'source_parent_type' => TGS_LEDGER_TYPE_TRANSFER_EXPORT, // 12
@@ -1132,7 +1249,75 @@ class TGS_Transfer_Ajax
                 'note_suffix_full' => 'Từ phiếu xuất',
                 'ticket_log_desc' => 'Tạo phiếu mua nội bộ từ shop'
             ]
-        ]);
+        ];
+    }
+
+    /**
+     * Tự sinh phiếu mua nội bộ (chờ duyệt) + phiếu nhập bên shop NHẬN,
+     * ngay khi shop bán duyệt phiếu xuất kho.
+     *
+     * Trước đây shop nhận phải vào màn "Chờ mua nội bộ", bấm xem rồi bấm tạo —
+     * thao tác thừa vì gần như luôn nhận đủ đúng những gì shop bán đã xuất.
+     *
+     * Chạy trên blog của shop nhận (switch_to_blog) vì mọi thứ bên trong đều
+     * dùng $wpdb->prefix của site hiện tại: transfer_ledger, local_ledger,
+     * local_ledger_item… đều là bảng riêng của từng shop.
+     *
+     * KHÔNG ném lỗi ra ngoài: shop bán đã duyệt xong và hàng đã trừ kho, hỏng
+     * bước này thì cùng lắm shop nhận vào màn chờ bấm tạo tay như cũ. Chặn cả
+     * việc duyệt lại vì lỗi ở site khác là thiệt hơn nhiều.
+     *
+     * @return array|null Kết quả để ghi log / trả kèm response.
+     */
+    private static function auto_create_destination_import($transfer, $destination_blog_id, $source_blog_id)
+    {
+        if (empty($destination_blog_id) || empty($transfer->source_ledger_id)) {
+            return null;
+        }
+
+        $result = null;
+        switch_to_blog($destination_blog_id);
+
+        try {
+            global $wpdb;
+            $table = $wpdb->prefix . 'transfer_ledger';
+
+            /*
+             * Dòng transfer_ledger BÊN SHOP NHẬN là một bản ghi riêng, có
+             * transfer_ledger_id khác hẳn bên nguồn. Nối hai bên bằng cặp
+             * (source_blog_id, source_ledger_id) — chính là cách
+             * create_transfer_records() ở plugin shop đã ghi lúc tạo phiếu.
+             */
+            $dest = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM {$table}
+                  WHERE source_blog_id = %d AND source_ledger_id = %d AND transfer_type = %d
+                  ORDER BY transfer_ledger_id DESC LIMIT 1",
+                $source_blog_id,
+                intval($transfer->source_ledger_id),
+                TGS_TRANSFER_TYPE_INTERNAL
+            ));
+
+            if (!$dest) {
+                $result = ['ok' => false, 'message' => 'Không tìm thấy bản ghi transfer ở shop nhận'];
+            } elseif (!empty($dest->destination_ledger_id)) {
+                // Đã có phiếu rồi (duyệt lại, hoặc shop nhận vừa bấm tạo tay)
+                $result = ['ok' => true, 'skipped' => true, 'message' => 'Shop nhận đã có phiếu mua nội bộ'];
+            } else {
+                $result = self::do_create_import_internal(self::internal_import_config(), [
+                    'transfer_id'        => intval($dest->transfer_ledger_id),
+                    'created_by_user_id' => 0, // hệ thống, không mượn danh người duyệt bên shop bán
+                    'note'               => 'Tự động tạo khi shop bán duyệt phiếu xuất kho.',
+                    'items'              => '', // rỗng = nhận toàn bộ theo số lượng gốc
+                ]);
+            }
+        } catch (Exception $e) {
+            $result = ['ok' => false, 'message' => $e->getMessage()];
+        }
+
+        self::$import_silent = false; // trả cờ về mặc định cho phần sau của request
+        restore_current_blog();
+
+        return $result;
     }
 
     /**
