@@ -2,7 +2,7 @@
 /**
  * Partial: Modal + JS xác nhận lệch SL nhập vs SL chứng từ
  *
- * Dùng cho các trang tạo phiếu mua nội bộ / nhận hoàn nội bộ
+ * Dùng cho các trang tạo phiếu nhận nội bộ / nhận hoàn nội bộ
  * (transfer-import-add.php, transfer-return-receive-add.php).
  *
  * Cách dùng:

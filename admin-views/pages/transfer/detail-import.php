@@ -1,6 +1,6 @@
 <?php
 /**
- * Chi tiết phiếu mua nội bộ
+ * Chi tiết phiếu nhận nội bộ
  *
  * Sử dụng ticket detail base
  *

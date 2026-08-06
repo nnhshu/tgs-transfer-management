@@ -1,6 +1,6 @@
 <?php
 /**
- * Báo cáo & Thống kê mua bán nội bộ
+ * Báo cáo & Thống kê luân chuyển nội bộ
  *
  * Trang dashboard hiển thị tổng quan luân chuyển hàng giữa các shop
  *
@@ -23,12 +23,12 @@ $current_shop_name = get_bloginfo('name');
         <div class="d-flex flex-column justify-content-center">
             <h4 class="mb-1">
                 <i class="bx bx-bar-chart-alt-2 text-primary"></i>
-                Báo cáo & Thống kê mua bán nội bộ
+                Báo cáo & Thống kê luân chuyển nội bộ
             </h4>
             <p class="text-muted mb-0">
                 <a href="<?php echo admin_url('admin.php?page=tgs-shop-management'); ?>">Dashboard</a>
                 <span class="mx-1">/</span>
-                <span>Báo cáo mua bán nội bộ</span>
+                <span>Báo cáo luân chuyển nội bộ</span>
             </p>
         </div>
         <div class="d-flex gap-2">
@@ -92,7 +92,7 @@ $current_shop_name = get_bloginfo('name');
                             </div>
                         </div>
                         <h4 class="card-title mb-1" id="statExportCount">0</h4>
-                        <small class="text-muted">Phiếu bán nội bộ</small>
+                        <small class="text-muted">Phiếu xuất nội bộ</small>
                         <div class="mt-2">
                             <span class="badge bg-label-success" id="statExportApproved">0 đã duyệt</span>
                             <span class="badge bg-label-warning" id="statExportPending">0 chờ duyệt</span>
@@ -113,7 +113,7 @@ $current_shop_name = get_bloginfo('name');
                             </div>
                         </div>
                         <h4 class="card-title mb-1" id="statImportCount">0</h4>
-                        <small class="text-muted">Phiếu mua nội bộ</small>
+                        <small class="text-muted">Phiếu nhận nội bộ</small>
                         <div class="mt-2">
                             <span class="badge bg-label-success" id="statImportApproved">0 đã duyệt</span>
                             <span class="badge bg-label-warning" id="statImportPending">0 chờ duyệt</span>
@@ -215,7 +215,7 @@ $current_shop_name = get_bloginfo('name');
                             <table class="table table-hover mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th>Shop nhận</th>
+                                        <th>Nơi nhận</th>
                                         <th class="text-center">Số phiếu</th>
                                         <th class="text-center">SP</th>
                                         <th class="text-center">Trạng thái</th>

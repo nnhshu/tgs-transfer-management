@@ -134,7 +134,7 @@ if (!$transfer_id) {
                         <span class="badge bg-primary ms-auto" id="docFilesCount">0 file</span>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted small mb-2">Các file chứng từ được kế thừa từ phiếu trả hàng nội bộ của shop nguồn. Sẽ được lưu vào phiếu nhận trả.</p>
+                        <p class="text-muted small mb-2">Các file chứng từ được kế thừa từ phiếu trả hàng nội bộ của nơi xuất. Sẽ được lưu vào phiếu nhận trả.</p>
                         <div id="docFilesList" class="d-flex flex-wrap gap-3">
                             <p class="text-muted fst-italic">Không có chứng từ từ shop trả.</p>
                         </div>

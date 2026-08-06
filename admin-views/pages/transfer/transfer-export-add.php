@@ -3,7 +3,7 @@
  * Transfer Export Add - Tạo Phiếu Bán Hàng Nội Bộ
  *
  * Sử dụng ticket-create-base từ tgs_shop_management để render giao diện
- * Tương tự như sale-add.php nhưng dành cho bán nội bộ (xuất cho chi nhánh)
+ * Tương tự như sale-add.php nhưng dành cho xuất nội bộ (xuất cho chi nhánh)
  *
  * @package tgs-transfer-management
  */

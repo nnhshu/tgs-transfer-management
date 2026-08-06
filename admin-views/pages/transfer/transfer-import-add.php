@@ -1,8 +1,8 @@
 <?php
 /**
- * Form tạo phiếu mua hàng nội bộ
+ * Form tạo phiếu nhận hàng nội bộ
  *
- * Tạo phiếu mua dựa trên phiếu bán đã được duyệt
+ * Tạo phiếu nhận dựa trên phiếu xuất đã được duyệt
  * - Sản phẩm không tracking: nhập số lượng
  * - Sản phẩm tracking: chọn mã định danh (lot) qua modal + scan
  *
@@ -22,7 +22,7 @@ $nonce = wp_create_nonce('tgs_transfer_nonce');
 $transfer_id = isset($_GET['transfer_id']) ? intval($_GET['transfer_id']) : 0;
 
 if (!$transfer_id) {
-    echo '<div class="alert alert-danger">Không tìm thấy thông tin phiếu bán. <a href="' . esc_url(admin_url('admin.php?page=tgs-shop-management&view=transfer-pending-imports')) . '">Quay lại</a></div>';
+    echo '<div class="alert alert-danger">Không tìm thấy thông tin phiếu xuất. <a href="' . esc_url(admin_url('admin.php?page=tgs-shop-management&view=transfer-pending-imports')) . '">Quay lại</a></div>';
     return;
 }
 ?>
@@ -32,14 +32,14 @@ if (!$transfer_id) {
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
         <div class="d-flex flex-column justify-content-center">
             <h4 class="mb-1">
-                Mua hàng nội bộ
+                Nhận hàng nội bộ
             </h4>
             <p class="text-muted mb-0">
                 <a href="<?php echo admin_url('admin.php?page=tgs-shop-management'); ?>">Dashboard</a>
                 <span class="mx-1">/</span>
-                <a href="<?php echo admin_url('admin.php?page=tgs-shop-management&view=transfer-pending-imports'); ?>">Chờ mua từ shop bán</a>
+                <a href="<?php echo admin_url('admin.php?page=tgs-shop-management&view=transfer-pending-imports'); ?>">Chờ nhận nội bộ</a>
                 <span class="mx-1">/</span>
-                <span>Tạo phiếu mua</span>
+                <span>Tạo phiếu nhận</span>
             </p>
         </div>
         <div>
@@ -61,7 +61,7 @@ if (!$transfer_id) {
         <div class="spinner-border text-secondary" role="status">
             <span class="visually-hidden">Đang tải...</span>
         </div>
-        <p class="mt-3 text-muted">Đang tải thông tin phiếu bán...</p>
+        <p class="mt-3 text-muted">Đang tải thông tin phiếu xuất...</p>
     </div>
 
     <!-- Error State -->
@@ -81,7 +81,7 @@ if (!$transfer_id) {
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="card-title mb-0">Thông tin phiếu bán</h5>
+                        <h5 class="card-title mb-0">Thông tin phiếu xuất</h5>
                     </div>
                     <div class="card-body">
                         <div class="row">
@@ -90,11 +90,11 @@ if (!$transfer_id) {
                                 <span class="fw-semibold" id="infoTransferId">#<?php echo esc_html($transfer_id); ?></span>
                             </div>
                             <div class="col-md-2 mb-3">
-                                <small class="text-muted d-block">Shop bán</small>
+                                <small class="text-muted d-block">Nơi xuất</small>
                                 <span class="fw-semibold" id="infoSourceShop">—</span>
                             </div>
                             <div class="col-md-2 mb-3">
-                                <small class="text-muted d-block">Phiếu bán nguồn</small>
+                                <small class="text-muted d-block">Phiếu xuất nguồn</small>
                                 <span id="infoSourceLedger">—</span>
                             </div>
                             <div class="col-md-2 mb-3">
@@ -106,7 +106,7 @@ if (!$transfer_id) {
                                 <span id="infoStatus">—</span>
                             </div>
                             <div class="col-md-2 mb-3">
-                                <small class="text-muted d-block">Ghi chú từ shop bán</small>
+                                <small class="text-muted d-block">Ghi chú từ nơi xuất</small>
                                 <span class="text-muted fst-italic" id="infoNote">—</span>
                             </div>
                         </div>
@@ -114,7 +114,7 @@ if (!$transfer_id) {
                             <div class="col-md-12 mb-2">
                                 <small class="text-muted d-block">
                                     <i class="bx bx-code-alt text-primary me-1"></i>Nguồn phần mềm
-                                    <span class="text-muted fst-italic">(kế thừa từ phiếu shop bán — tự động copy y hệt sang phiếu mua nội bộ)</span>
+                                    <span class="text-muted fst-italic">(kế thừa từ phiếu nơi xuất — tự động copy y hệt sang phiếu nhận nội bộ)</span>
                                 </small>
                                 <span id="infoSoftwareSource" class="d-inline-flex flex-wrap gap-1">—</span>
                             </div>
@@ -124,19 +124,19 @@ if (!$transfer_id) {
             </div>
         </div>
 
-        <!-- Row 1.5: Chứng từ từ shop bán -->
+        <!-- Row 1.5: Chứng từ từ nơi xuất -->
         <div class="row mb-4" id="docFilesRow" style="display:none;">
             <div class="col-12">
                 <div class="card border-primary">
                     <div class="card-header d-flex align-items-center gap-2 bg-primary bg-opacity-10">
                         <i class="bx bx-file-blank text-primary fs-5"></i>
-                        <h5 class="card-title mb-0 text-primary">Chứng từ từ shop bán</h5>
+                        <h5 class="card-title mb-0 text-primary">Chứng từ từ nơi xuất</h5>
                         <span class="badge bg-primary ms-auto" id="docFilesCount">0 file</span>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted small mb-2">Các file chứng từ được kế thừa từ phiếu bán nội bộ của shop nguồn. Sẽ được lưu vào phiếu mua.</p>
+                        <p class="text-muted small mb-2">Các file chứng từ được kế thừa từ phiếu xuất nội bộ của nơi xuất. Sẽ được lưu vào phiếu nhận.</p>
                         <div id="docFilesList" class="d-flex flex-wrap gap-3">
-                            <p class="text-muted fst-italic">Không có chứng từ từ shop bán.</p>
+                            <p class="text-muted fst-italic">Không có chứng từ từ nơi xuất.</p>
                         </div>
                     </div>
                 </div>
@@ -185,9 +185,9 @@ if (!$transfer_id) {
                     <div class="card-body py-3">
                         <div class="row align-items-center">
                             <div class="col-md-4">
-                                <label class="form-label mb-1">Ghi chú phiếu mua</label>
+                                <label class="form-label mb-1">Ghi chú phiếu nhận</label>
                                 <textarea class="form-control" id="importNote" rows="2"
-                                          placeholder="Ghi chú cho phiếu mua (tùy chọn)..."></textarea>
+                                          placeholder="Ghi chú cho phiếu nhận (tùy chọn)..."></textarea>
                             </div>
                             <div class="col-md-4">
                                 <div class="alert alert-warning mb-0 py-2" id="warningSync" style="display: none;">
@@ -215,9 +215,9 @@ if (!$transfer_id) {
                             </div>
                             <div class="col-md-4 text-end">
                                 <button type="button" class="btn btn-success btn-lg" id="btnCreateImport" disabled>
-                                    <i class="bx bx-check-circle me-1"></i> Tạo phiếu mua
+                                    <i class="bx bx-check-circle me-1"></i> Tạo phiếu nhận
                                 </button>
-                                <small class="d-block text-muted mt-1">Phiếu mua sẽ ở trạng thái chờ duyệt</small>
+                                <small class="d-block text-muted mt-1">Phiếu nhận sẽ ở trạng thái chờ duyệt</small>
                             </div>
                         </div>
                     </div>
@@ -342,7 +342,7 @@ jQuery(document).ready(function($) {
     const nonce = '<?php echo esc_js($nonce); ?>';
     const transferId = <?php echo intval($transfer_id); ?>;
     const receiveDoneLabel = 'Nhập hết';
-    const syncTargetLabel = 'phiếu mua';
+    const syncTargetLabel = 'phiếu nhận';
 
     let transferData = null;
     let productsData = [];
@@ -383,13 +383,13 @@ jQuery(document).ready(function($) {
 
                     // Check if already imported
                     if (transferData.destination_ledger_id) {
-                        showError('Phiếu bán này đã được mua. Mã phiếu mua: #' + transferData.destination_ledger_id);
+                        showError('Phiếu xuất này đã được mua. Mã phiếu nhận: #' + transferData.destination_ledger_id);
                         return;
                     }
 
                     // Check if approved by source shop
                     if (transferData.local_ledger_approver_status != 1) {
-                        showError('Phiếu bán này chưa được shop bán duyệt.');
+                        showError('Phiếu xuất này chưa được nơi xuất duyệt.');
                         return;
                     }
 
@@ -436,12 +436,12 @@ jQuery(document).ready(function($) {
                     updateSummary();
                     $('#mainForm').removeClass('d-none');
                 } else {
-                    showError(response.data?.message || 'Không tìm thấy thông tin phiếu bán');
+                    showError(response.data?.message || 'Không tìm thấy thông tin phiếu xuất');
                 }
             },
             error: function() {
                 $('#loadingSpinner').addClass('d-none');
-                showError('Có lỗi khi tải thông tin phiếu bán');
+                showError('Có lỗi khi tải thông tin phiếu xuất');
             }
         });
     }
@@ -463,10 +463,10 @@ jQuery(document).ready(function($) {
             : '<span class="badge bg-warning">Chờ duyệt</span>';
         $('#infoStatus').html(statusBadge);
 
-        // Hiển thị nguyồn phần mềm kế thừa từ phiếu shop bán
+        // Hiển thị nguyồn phần mềm kế thừa từ phiếu nơi xuất
         $('#infoSoftwareSource').html(renderSoftwareSourceBadges(transferData.local_ledger_software_source));
 
-        // Hiển thị file chứng từ từ shop bán
+        // Hiển thị file chứng từ từ nơi xuất
         renderDocFiles();
     }
 
@@ -1180,12 +1180,12 @@ jQuery(document).ready(function($) {
                 },
                 success: function(response) {
                     if (response.success) {
-                        showAlert('success', 'Tạo phiếu mua thành công! Mã phiếu: #' + response.data.ledger_id);
+                        showAlert('success', 'Tạo phiếu nhận thành công! Mã phiếu: #' + response.data.ledger_id);
                         setTimeout(function() {
                             window.location.href = '<?php echo admin_url('admin.php?page=tgs-shop-management&view=ticket-transfer-import-detail'); ?>&id=' + response.data.ledger_id;
                         }, 2000);
                     } else {
-                        showAlert('danger', response.data?.message || 'Có lỗi khi tạo phiếu mua');
+                        showAlert('danger', response.data?.message || 'Có lỗi khi tạo phiếu nhận');
                         btn.prop('disabled', false).html(originalText);
                     }
                 },

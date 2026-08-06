@@ -1,6 +1,6 @@
 <?php
 /**
- * Danh sách phiếu mua nội bộ
+ * Danh sách phiếu nhận nội bộ
  *
  * Sử dụng ticket list base
  *

@@ -149,7 +149,7 @@ class TGS_Transfer_Ajax
             wp_send_json_error(['message' => 'Không tìm thấy phiếu cha']);
         }
 
-        // Check cả 2 loại phiếu cha: bán nội bộ (12) và trả nội bộ (14)
+        // Check cả 2 loại phiếu cha: xuất nội bộ (12) và trả nội bộ (14)
         $parent_ledger = $wpdb->get_row($wpdb->prepare("
             SELECT * FROM {$ledger_table}
             WHERE local_ledger_id = %d
@@ -157,7 +157,7 @@ class TGS_Transfer_Ajax
         ", $parent_id, TGS_LEDGER_TYPE_TRANSFER_EXPORT, TGS_LEDGER_TYPE_INTERNAL_RETURN));
 
         if (!$parent_ledger) {
-            wp_send_json_error(['message' => 'Không tìm thấy phiếu bán/trả nội bộ']);
+            wp_send_json_error(['message' => 'Không tìm thấy phiếu xuất/trả nội bộ']);
         }
 
         // Lấy thông tin transfer từ phiếu cha
@@ -231,7 +231,7 @@ class TGS_Transfer_Ajax
             }
 
             // ========== CẬP NHẬT BATCH_DISTRIBUTION - Transfer Export ==========
-            // Đánh dấu transferred_out tại shop nguồn
+            // Đánh dấu transferred_out tại nơi xuất
             if (class_exists('TGS_Batch_Distribution')) {
                 $items_with_batch = self::collect_items_with_batch($items);
                 if (!empty($items_with_batch)) {
@@ -267,7 +267,7 @@ class TGS_Transfer_Ajax
             $log_message = !empty($note) ? $note : 'Duyệt phiếu xuất kho (chuyển đến shop: ' . $dest_shop_name . ')';
             $success_message = $is_return
                 ? 'Duyệt phiếu trả nội bộ thành công. Shop mẹ có thể nhận hàng trả.'
-                : 'Duyệt phiếu bán nội bộ thành công. Shop mua có thể nhận hàng.';
+                : 'Duyệt phiếu xuất nội bộ thành công. Nơi nhận có thể nhận hàng.';
 
             TGS_Shop_Ticket_Helper::add_ticket_log($ledger_id, 'approve', [
                 'destination_blog_id' => $destination_blog_id,
@@ -282,12 +282,12 @@ class TGS_Transfer_Ajax
             /*
              * ─── TỰ SINH PHIẾU MUA NỘI BỘ BÊN SHOP NHẬN ─────────────────────
              *
-             * Đặt SAU COMMIT, cố ý. Việc duyệt xuất ở shop bán đã xong và đã ghi
+             * Đặt SAU COMMIT, cố ý. Việc duyệt xuất ở nơi xuất đã xong và đã ghi
              * xuống DB; phần dưới đây thao tác trên database của SITE KHÁC nên
              * không nằm chung transaction được — MySQL transaction chỉ bao được
              * kết nối hiện tại, không bao chéo blog.
              *
-             * Chỉ áp cho phiếu bán nội bộ. Phiếu TRẢ nội bộ có luồng nhận riêng
+             * Chỉ áp cho phiếu xuất nội bộ. Phiếu TRẢ nội bộ có luồng nhận riêng
              * (create_return_receive) với cấu hình khác, không gộp vào đây.
              */
             $auto_import = null;
@@ -301,25 +301,25 @@ class TGS_Transfer_Ajax
                 if (is_array($auto_import) && empty($auto_import['ok'])) {
                     /*
                      * Không chặn việc duyệt: hàng đã trừ kho bên bán rồi. Ghi log
-                     * để truy được, shop nhận vẫn vào màn "Chờ mua nội bộ" bấm
+                     * để truy được, nơi nhận vẫn vào màn "Chờ nhận nội bộ" bấm
                      * tạo tay như luồng cũ.
                      */
                     TGS_Shop_Ticket_Helper::add_ticket_log($ledger_id, 'auto_import_failed', [
                         'destination_blog_id' => $destination_blog_id,
                         'error' => $auto_import['message'] ?? '',
-                    ], 'Không tự tạo được phiếu mua nội bộ bên shop nhận: ' . ($auto_import['message'] ?? ''));
+                    ], 'Không tự tạo được phiếu nhận nội bộ bên nơi nhận: ' . ($auto_import['message'] ?? ''));
 
-                    $success_message .= ' (Chưa tự tạo được phiếu bên shop mua, shop mua vào màn "Chờ mua nội bộ" tạo giúp.)';
+                    $success_message .= ' (Chưa tự tạo được phiếu bên nơi nhận, nơi nhận vào màn "Chờ nhận nội bộ" tạo giúp.)';
                 } elseif (is_array($auto_import) && empty($auto_import['skipped'])) {
-                    $success_message .= ' Đã tự tạo phiếu mua nội bộ '
-                        . ($auto_import['ledger_code'] ?? '') . ' chờ shop mua duyệt.';
+                    $success_message .= ' Đã tự tạo phiếu nhận nội bộ '
+                        . ($auto_import['ledger_code'] ?? '') . ' chờ nơi nhận duyệt.';
 
                     TGS_Shop_Ticket_Helper::add_ticket_log($ledger_id, 'auto_import_created', [
                         'destination_blog_id'   => $destination_blog_id,
                         'dest_ledger_id'        => $auto_import['ledger_id'] ?? 0,
                         'dest_ledger_code'      => $auto_import['ledger_code'] ?? '',
                         'dest_auto_import_code' => $auto_import['auto_import_code'] ?? '',
-                    ], 'Tự tạo phiếu mua nội bộ bên shop nhận: ' . ($auto_import['ledger_code'] ?? ''));
+                    ], 'Tự tạo phiếu nhận nội bộ bên nơi nhận: ' . ($auto_import['ledger_code'] ?? ''));
                 }
             }
 
@@ -457,7 +457,7 @@ class TGS_Transfer_Ajax
      * Ghi batch_movement records cho transfer.
      *
      * @param array $items_with_batch [['batch_id' => X, 'quantity' => Y], ...]
-     * @param int   $from_blog_id     Shop nguồn
+     * @param int   $from_blog_id     Nơi xuất
      * @param int   $to_blog_id       Shop đích
      * @param int   $movement_type    1=điều chuyển, 2=trả lại, 3=hủy
      * @param int   $source_ledger_id Ledger ID tham chiếu
@@ -547,12 +547,12 @@ class TGS_Transfer_Ajax
     }
 
     /**
-     * Validate sản phẩm global cho shop nguồn/đích.
+     * Validate sản phẩm global cho nơi xuất/đích.
      * Giữ tên hàm cũ để không làm gãy các đoạn gọi nội bộ.
      *
      * @param object $item Thông tin item (chứa local_product_name_id, local_product_sku)
      * @param int $destination_blog_id Blog ID của shop đích
-     * @param int $source_blog_id Blog ID của shop nguồn
+     * @param int $source_blog_id Blog ID của nơi xuất
      */
     private static function sync_product_to_destination($item, $destination_blog_id, $source_blog_id)
     {
@@ -615,7 +615,7 @@ class TGS_Transfer_Ajax
 
             if (!$source_blog_id) continue;
 
-            // Switch sang shop nguồn để lấy thông tin phiếu
+            // Switch sang nơi xuất để lấy thông tin phiếu
             switch_to_blog($source_blog_id);
 
             $source_ledger_table = $wpdb->prefix . 'local_ledger';
@@ -638,7 +638,7 @@ class TGS_Transfer_Ajax
                 $transfer->local_ledger_note = $source_ledger->local_ledger_note;
                 $transfer->local_ledger_approver_status = $source_ledger->local_ledger_approver_status;
 
-                // Tên shop nguồn
+                // Tên nơi xuất
                 $transfer->source_shop_name = get_bloginfo('name');
 
                 // Đếm số sản phẩm từ local_ledger_item_id
@@ -686,7 +686,7 @@ class TGS_Transfer_Ajax
     }
 
     /**
-     * Lấy danh sách phiếu chờ nhập (mua nội bộ)
+     * Lấy danh sách phiếu chờ nhập (nhận nội bộ)
      * Gọi đến do_get_pending_transfers_internal
      */
     public static function get_pending_imports()
@@ -719,9 +719,9 @@ class TGS_Transfer_Ajax
      *
      * Hàm do_create_import_internal() vốn chỉ dùng cho AJAX: đọc $_POST rồi kết
      * thúc request bằng wp_send_json_*(). Nay nó còn được gọi thẳng từ
-     * approve_export() để tự sinh phiếu mua nội bộ bên shop nhận — mà
+     * approve_export() để tự sinh phiếu nhận nội bộ bên nơi nhận — mà
      * wp_send_json_*() gọi wp_die(), tức là sẽ giết luôn cả request duyệt xuất
-     * đang chạy dở của shop bán.
+     * đang chạy dở của nơi xuất.
      *
      * Cờ này quyết định cách "trả lời": bật thì trả về mảng cho code gọi tự xử,
      * tắt thì giữ nguyên hành vi cũ.
@@ -761,7 +761,7 @@ class TGS_Transfer_Ajax
 
         /*
          * Chạy ngầm thì người tạo là "hệ thống" (user_id = 0), KHÔNG mượn danh
-         * người vừa bấm duyệt bên shop bán: họ thường không có tài khoản ở shop
+         * người vừa bấm duyệt bên nơi xuất: họ thường không có tài khoản ở shop
          * nhận, ghi tên họ vào log bên đó là sai chủ thể.
          */
         $current_user_id = $silent
@@ -781,7 +781,7 @@ class TGS_Transfer_Ajax
             ? (string) ($args['items'] ?? '')
             : (isset($_POST['items']) ? wp_unslash($_POST['items']) : '');
 
-        // advance_meta: danh sách file chứng từ được copy từ shop nguồn
+        // advance_meta: danh sách file chứng từ được copy từ nơi xuất
         $advance_meta_raw = (!$silent && !empty($_POST['advance_meta']))
             ? wp_unslash($_POST['advance_meta'])
             : '';
@@ -834,7 +834,7 @@ class TGS_Transfer_Ajax
         $source_blog_id = intval($local_transfer->source_blog_id);
         $source_ledger_id = intval($local_transfer->source_ledger_id);
 
-        // Step 2: Switch sang shop nguồn để lấy thông tin
+        // Step 2: Switch sang nơi xuất để lấy thông tin
         switch_to_blog($source_blog_id);
 
         $source_ledger_table = $wpdb->prefix . 'local_ledger';
@@ -1034,7 +1034,7 @@ class TGS_Transfer_Ajax
                 $parent_title = sprintf($config['parent_title_template'], $parent_ledger_code);
             }
 
-            // Xử lý advance_meta: giữ file từ shop nguồn hoặc dùng danh sách frontend gửi lên
+            // Xử lý advance_meta: giữ file từ nơi xuất hoặc dùng danh sách frontend gửi lên
             $advance_meta_to_save = null;
             if (!empty($advance_meta_raw)) {
                 // Validate JSON từ frontend
@@ -1043,7 +1043,7 @@ class TGS_Transfer_Ajax
                     $advance_meta_to_save = wp_json_encode($decoded, JSON_UNESCAPED_UNICODE);
                 }
             } elseif (!empty($source_ledger->local_ledger_advance_meta)) {
-                // Fallback: copy advance_meta từ shop nguồn
+                // Fallback: copy advance_meta từ nơi xuất
                 $source_meta = json_decode($source_ledger->local_ledger_advance_meta, true);
                 if (is_array($source_meta) && !empty($source_meta['doc_files'])) {
                     $advance_meta_to_save = wp_json_encode(['doc_files' => $source_meta['doc_files']], JSON_UNESCAPED_UNICODE);
@@ -1106,7 +1106,7 @@ class TGS_Transfer_Ajax
                 'local_ledger_item_id' => $items_json_encoded
             ], ['local_ledger_id' => $parent_ledger_id]);
 
-            // ========== BƯỚC 4: Cập nhật transfer_ledger ở shop nguồn ==========
+            // ========== BƯỚC 4: Cập nhật transfer_ledger ở nơi xuất ==========
             switch_to_blog($source_blog_id);
 
             $source_transfer_table_name = $wpdb->prefix . 'transfer_ledger';
@@ -1203,23 +1203,23 @@ class TGS_Transfer_Ajax
     }
 
     /**
-     * Tạo phiếu mua nội bộ (nhập từ shop bán)
+     * Tạo phiếu nhận nội bộ (nhập từ nơi xuất)
      * Gọi đến do_create_import_internal với config cho IMPORT flow
      */
     public static function create_import()
     {
         check_ajax_referer('tgs_transfer_nonce', 'nonce');
 
-        // Gọi hàm dùng chung với config cho phiếu mua nội bộ
+        // Gọi hàm dùng chung với config cho phiếu nhận nội bộ
         self::do_create_import_internal(self::internal_import_config());
     }
 
     /**
-     * Cấu hình phiếu mua nội bộ (MNB) + phiếu nhập tự động (AMN).
+     * Cấu hình phiếu nhận nội bộ (MNB) + phiếu nhập tự động (AMN).
      *
      * Tách riêng vì nay có HAI đường gọi tới cùng cấu hình này:
-     *   - create_import()  : shop nhận tự bấm tạo ở màn "chờ mua nội bộ"
-     *   - auto_create_destination_import() : tự sinh khi shop bán duyệt xuất
+     *   - create_import()  : nơi nhận tự bấm tạo ở màn "chờ nhận nội bộ"
+     *   - auto_create_destination_import() : tự sinh khi nơi xuất duyệt xuất
      */
     private static function internal_import_config()
     {
@@ -1227,44 +1227,44 @@ class TGS_Transfer_Ajax
             'transfer_type' => TGS_TRANSFER_TYPE_INTERNAL,        // 1
             'parent_ledger_type' => TGS_LEDGER_TYPE_TRANSFER_IMPORT, // 13
             'source_parent_type' => TGS_LEDGER_TYPE_TRANSFER_EXPORT, // 12
-            'parent_code_prefix' => 'MNB',                        // Mua Nội Bộ
+            'parent_code_prefix' => 'MNB',                        // Nhận Nội Bộ
             'child_code_prefix' => 'AMN',                         // Auto Mua Nội bộ
-            'parent_title_template' => 'Thông tin phiếu mua nội bộ %s', // %s = code
+            'parent_title_template' => 'Thông tin phiếu nhận nội bộ %s', // %s = code
             'child_title_template' => 'Nhập tự động từ %s', // %s = parent code
             'log_action' => 'transfer_import_created',
             'redirect_view' => 'ticket-transfer-import-detail',
-            'success_message' => 'Tạo phiếu mua nội bộ thành công',
+            'success_message' => 'Tạo phiếu nhận nội bộ thành công',
             'ticket_log_type' => 'import',
             'doc_tracker_ticket_type' => 'internal_purchase',
             'labels' => [
                 'transfer_not_found' => 'Không tìm thấy phiếu chuyển',
                 'already_created' => 'Phiếu này đã được tạo phiếu nhập trước đó',
                 'source_not_found' => 'Không tìm thấy phiếu xuất nguồn',
-                'auto_export_not_approved' => 'Phiếu xuất tự động chưa được shop bán duyệt',
-                'source_not_approved' => 'Phiếu xuất chưa được shop bán duyệt',
+                'auto_export_not_approved' => 'Phiếu xuất tự động chưa được nơi xuất duyệt',
+                'source_not_approved' => 'Phiếu xuất chưa được nơi xuất duyệt',
                 'no_items' => 'Không có sản phẩm trong phiếu xuất',
                 'select_items' => 'Vui lòng chọn ít nhất 1 sản phẩm để nhập',
                 'parent_error' => 'Lỗi tạo phiếu nhập từ mẹ (phiếu cha)',
                 'note_suffix_partial' => 'Từ phiếu xuất',
                 'note_suffix_full' => 'Từ phiếu xuất',
-                'ticket_log_desc' => 'Tạo phiếu mua nội bộ từ shop'
+                'ticket_log_desc' => 'Tạo phiếu nhận nội bộ từ shop'
             ]
         ];
     }
 
     /**
-     * Tự sinh phiếu mua nội bộ (chờ duyệt) + phiếu nhập bên shop NHẬN,
-     * ngay khi shop bán duyệt phiếu xuất kho.
+     * Tự sinh phiếu nhận nội bộ (chờ duyệt) + phiếu nhập bên shop NHẬN,
+     * ngay khi nơi xuất duyệt phiếu xuất kho.
      *
-     * Trước đây shop nhận phải vào màn "Chờ mua nội bộ", bấm xem rồi bấm tạo —
-     * thao tác thừa vì gần như luôn nhận đủ đúng những gì shop bán đã xuất.
+     * Trước đây nơi nhận phải vào màn "Chờ nhận nội bộ", bấm xem rồi bấm tạo —
+     * thao tác thừa vì gần như luôn nhận đủ đúng những gì nơi xuất đã xuất.
      *
-     * Chạy trên blog của shop nhận (switch_to_blog) vì mọi thứ bên trong đều
+     * Chạy trên blog của nơi nhận (switch_to_blog) vì mọi thứ bên trong đều
      * dùng $wpdb->prefix của site hiện tại: transfer_ledger, local_ledger,
      * local_ledger_item… đều là bảng riêng của từng shop.
      *
-     * KHÔNG ném lỗi ra ngoài: shop bán đã duyệt xong và hàng đã trừ kho, hỏng
-     * bước này thì cùng lắm shop nhận vào màn chờ bấm tạo tay như cũ. Chặn cả
+     * KHÔNG ném lỗi ra ngoài: nơi xuất đã duyệt xong và hàng đã trừ kho, hỏng
+     * bước này thì cùng lắm nơi nhận vào màn chờ bấm tạo tay như cũ. Chặn cả
      * việc duyệt lại vì lỗi ở site khác là thiệt hơn nhiều.
      *
      * @return array|null Kết quả để ghi log / trả kèm response.
@@ -1298,15 +1298,15 @@ class TGS_Transfer_Ajax
             ));
 
             if (!$dest) {
-                $result = ['ok' => false, 'message' => 'Không tìm thấy bản ghi transfer ở shop nhận'];
+                $result = ['ok' => false, 'message' => 'Không tìm thấy bản ghi transfer ở nơi nhận'];
             } elseif (!empty($dest->destination_ledger_id)) {
-                // Đã có phiếu rồi (duyệt lại, hoặc shop nhận vừa bấm tạo tay)
-                $result = ['ok' => true, 'skipped' => true, 'message' => 'Shop nhận đã có phiếu mua nội bộ'];
+                // Đã có phiếu rồi (duyệt lại, hoặc nơi nhận vừa bấm tạo tay)
+                $result = ['ok' => true, 'skipped' => true, 'message' => 'Nơi nhận đã có phiếu nhận nội bộ'];
             } else {
                 $result = self::do_create_import_internal(self::internal_import_config(), [
                     'transfer_id'        => intval($dest->transfer_ledger_id),
-                    'created_by_user_id' => 0, // hệ thống, không mượn danh người duyệt bên shop bán
-                    'note'               => 'Tự động tạo khi shop bán duyệt phiếu xuất kho.',
+                    'created_by_user_id' => 0, // hệ thống, không mượn danh người duyệt bên nơi xuất
+                    'note'               => 'Tự động tạo khi nơi xuất duyệt phiếu xuất kho.',
                     'items'              => '', // rỗng = nhận toàn bộ theo số lượng gốc
                 ]);
             }
@@ -1366,7 +1366,7 @@ class TGS_Transfer_Ajax
             wp_send_json_error(['message' => 'Không tìm thấy phiếu cha']);
         }
 
-        // Check cả 2 loại phiếu cha: mua nội bộ (13) và nhận trả nội bộ (15)
+        // Check cả 2 loại phiếu cha: nhận nội bộ (13) và nhận trả nội bộ (15)
         $parent_ledger = $wpdb->get_row($wpdb->prepare("
             SELECT * FROM {$ledger_table}
             WHERE local_ledger_id = %d
@@ -1374,7 +1374,7 @@ class TGS_Transfer_Ajax
         ", $parent_id, TGS_LEDGER_TYPE_TRANSFER_IMPORT, TGS_LEDGER_TYPE_INTERNAL_RETURN_RECEIVE));
 
         if (!$parent_ledger) {
-            wp_send_json_error(['message' => 'Không tìm thấy phiếu mua/nhận trả nội bộ']);
+            wp_send_json_error(['message' => 'Không tìm thấy phiếu nhận/nhận trả nội bộ']);
         }
 
         // Lấy các item từ phiếu con nhập kho
@@ -1820,13 +1820,13 @@ class TGS_Transfer_Ajax
             // Check trạng thái duyệt của phiếu xuất tự động
             if ($auto_export_ledger->local_ledger_approver_status != TGS_APPROVER_STATUS_APPROVED) {
                 restore_current_blog();
-                wp_send_json_error(['message' => 'Phiếu này chưa được shop bán duyệt.']);
+                wp_send_json_error(['message' => 'Phiếu này chưa được nơi xuất duyệt.']);
             }
         } else {
             // Fallback: nếu không có phiếu con thì check phiếu cha
             if ($ledger && $ledger->local_ledger_approver_status != TGS_APPROVER_STATUS_APPROVED) {
                 restore_current_blog();
-                wp_send_json_error(['message' => 'Phiếu này chưa được shop bán duyệt.']);
+                wp_send_json_error(['message' => 'Phiếu này chưa được nơi xuất duyệt.']);
             }
         }
 
@@ -2354,7 +2354,7 @@ class TGS_Transfer_Ajax
                 'created_at' => $ri->created_at,
                 'status' => $ri->local_ledger_approver_status == TGS_APPROVER_STATUS_APPROVED ? 'approved' : 'pending',
                 'related_blog_id' => 0,
-                'related_shop_name' => 'Shop bán',
+                'related_shop_name' => 'Nơi xuất',
                 'products_count' => intval($products_count)
             ];
         }
@@ -2394,8 +2394,8 @@ class TGS_Transfer_Ajax
      * Giữ tên hàm cũ để tương thích code gọi nội bộ.
      * Không còn tạo/copy sản phẩm local; chỉ trả về ID global nếu tìm thấy.
      *
-     * @param object $source_product Thông tin sản phẩm từ shop nguồn
-     * @param int $source_blog_id Blog ID của shop nguồn
+     * @param object $source_product Thông tin sản phẩm từ nơi xuất
+     * @param int $source_blog_id Blog ID của nơi xuất
      * @return int|false ID sản phẩm global hoặc false nếu lỗi
      */
     private static function sync_product_from_source($source_product, $source_blog_id)
@@ -2449,7 +2449,7 @@ class TGS_Transfer_Ajax
             wp_send_json_error(['message' => 'Không tìm thấy phiếu cha']);
         }
 
-        // Check cả 2 loại phiếu cha: bán nội bộ (12) và trả nội bộ (14)
+        // Check cả 2 loại phiếu cha: xuất nội bộ (12) và trả nội bộ (14)
         $parent_ledger = $wpdb->get_row($wpdb->prepare("
             SELECT * FROM {$ledger_table}
             WHERE local_ledger_id = %d
@@ -2457,7 +2457,7 @@ class TGS_Transfer_Ajax
         ", $parent_ledger_id, TGS_LEDGER_TYPE_TRANSFER_EXPORT, TGS_LEDGER_TYPE_INTERNAL_RETURN));
 
         if (!$parent_ledger) {
-            wp_send_json_error(['message' => 'Không tìm thấy phiếu bán/trả nội bộ']);
+            wp_send_json_error(['message' => 'Không tìm thấy phiếu xuất/trả nội bộ']);
         }
 
         if ($child_ledger->local_ledger_approver_status == TGS_APPROVER_STATUS_REJECTED) {
@@ -2532,7 +2532,7 @@ class TGS_Transfer_Ajax
             ], $reason);
 
             wp_send_json_success([
-                'message' => 'Từ chối phiếu bán nội bộ thành công! Hàng đã nhập kho lại.',
+                'message' => 'Từ chối phiếu xuất nội bộ thành công! Hàng đã nhập kho lại.',
                 'reason' => $reason
             ]);
         } catch (Exception $e) {
@@ -2584,7 +2584,7 @@ class TGS_Transfer_Ajax
             wp_send_json_error(['message' => 'Không tìm thấy phiếu cha']);
         }
 
-        // Check cả 2 loại phiếu cha: mua nội bộ (13) và nhận trả nội bộ (15)
+        // Check cả 2 loại phiếu cha: nhận nội bộ (13) và nhận trả nội bộ (15)
         $parent_ledger = $wpdb->get_row($wpdb->prepare("
             SELECT * FROM {$ledger_table}
             WHERE local_ledger_id = %d
@@ -2592,7 +2592,7 @@ class TGS_Transfer_Ajax
         ", $parent_ledger_id, TGS_LEDGER_TYPE_TRANSFER_IMPORT, TGS_LEDGER_TYPE_INTERNAL_RETURN_RECEIVE));
 
         if (!$parent_ledger) {
-            wp_send_json_error(['message' => 'Không tìm thấy phiếu mua/nhận trả nội bộ']);
+            wp_send_json_error(['message' => 'Không tìm thấy phiếu nhận/nhận trả nội bộ']);
         }
 
         if ($child_ledger->local_ledger_approver_status == TGS_APPROVER_STATUS_REJECTED) {
@@ -2761,7 +2761,7 @@ class TGS_Transfer_Ajax
             ], $reason);
 
             wp_send_json_success([
-                'message' => 'Từ chối phiếu mua thành công! Hàng sẽ chờ trả về shop bán.',
+                'message' => 'Từ chối phiếu nhận thành công! Hàng sẽ chờ trả về nơi xuất.',
                 'reason' => $reason
             ]);
         } catch (Exception $e) {
@@ -2797,7 +2797,7 @@ class TGS_Transfer_Ajax
      * Luồng tương tự create_export nhưng:
      * - Có phiếu cha là MNB
      * - transfer_type = TGS_TRANSFER_TYPE_RETURN
-     * - source = shop trả, destination = shop nhận trả
+     * - source = shop trả, destination = nơi nhận trả
      */
     public static function create_return()
     {
