@@ -890,7 +890,7 @@ jQuery(document).ready(function($) {
                 { data: 'conditionHtml' }
             ],
             pageLength: 25,
-            lengthMenu: [[25, 50, -1], [25, 50, 'Tất cả']],
+            lengthMenu: [[25, 50, 100, 200, 500, -1], [25, 50, 100, 200, 500, 'Tất cả']],
             language: {
                 lengthMenu: 'Hiện _MENU_',
                 info: '_START_-_END_ / _TOTAL_',
