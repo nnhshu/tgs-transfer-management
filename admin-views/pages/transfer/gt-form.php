@@ -63,10 +63,12 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
 
     <div class="gt-tb">
         <span class="gt-title"><i class="bx bx-transfer-alt"></i> Nhập-Xuất kho nội bộ</span>
+        <button type="button" class="gt-edit gt-hide"><i class="bx bx-edit text-primary"></i>Sửa</button>
         <button type="button" class="gt-save gt-hide"><i class="bx bx-save text-primary"></i>Ghi</button>
         <button type="button" class="gt-save-close gt-hide"><i class="bx bx-save"></i>Ghi và Đóng</button>
         <button type="button" class="gt-print gt-hide"><i class="bx bx-printer"></i>In</button>
         <button type="button" class="gt-delete gt-hide"><i class="bx bx-x text-danger"></i>Xóa</button>
+        <button type="button" class="gt-cancel gt-hide"><i class="bx bx-undo"></i>Hủy sửa</button>
         <span class="sep"></span>
         <a href="<?php echo esc_url(tgs_url('ticket-transfer-exports')); ?>"><i class="bx bx-exit text-danger"></i>Đóng</a>
     </div>
@@ -118,7 +120,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
 <script>
 (function ($) {
     var $w = $('.gt-wrap'), id = +$w.data('id'), nonce = $w.data('nonce'), cur = +$w.data('blog'), sa = +$w.data('sa') === 1, canAll = sa, sites = [];
-    var lines = [], loaded = null, mode = 'new'; // new | edit (bên xuất sửa được) | receive (bên nhập chờ xác nhận) | view
+    var lines = [], loaded = null, mode = 'new', canEdit = false; // new | edit (bên xuất sửa được) | receive (bên nhập chờ xác nhận) | view
     var listUrl = '<?php echo esc_url_raw(tgs_url('ticket-transfer-exports')); ?>', formUrl = '<?php echo esc_url_raw(tgs_url('transfer-export-add')); ?>';
     var fmt = function (n) { return (+n || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 }); };
     var esc = function (s) { return $('<div>').text(s == null ? '' : s).html(); };
@@ -344,7 +346,9 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         var ed = editable();
         $w.find('.gt-hd, .gt-hd2').toggleClass('gt-ro', !ed);
         $w.find('.gt-save, .gt-save-close').toggleClass('gt-hide', !ed);
-        $w.find('.gt-delete').toggleClass('gt-hide', !(loaded && mode === 'edit' && +loaded.import_status !== 1));
+        $w.find('.gt-delete').toggleClass('gt-hide', !(loaded && canEdit && mode !== 'edit' && +loaded.import_status !== 1));
+        $w.find('.gt-edit').toggleClass('gt-hide', !(loaded && canEdit && mode !== 'edit'));
+        $w.find('.gt-cancel').toggleClass('gt-hide', !(loaded && mode === 'edit'));
         $w.find('.gt-print').toggleClass('gt-hide', !loaded);
         $w.find('.gt-add, .gt-help').toggleClass('gt-hide', !ed);
         $w.find('.gt-from-site').prop('disabled', !(ed && canAll && !loaded));
@@ -410,6 +414,8 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         }).fail(function () { $w.find('.gt-save, .gt-save-close').prop('disabled', false); msg('danger', 'Lỗi mạng'); });
     }
     $w.find('.gt-save').on('click', function () { save(false); });
+    $w.find('.gt-edit').on('click', function () { mode = 'edit'; applyMode(); fetchStock(); $in.focus(); });
+    $w.find('.gt-cancel').on('click', function () { location.href = formUrl + '&id=' + id; });
     $w.find('.gt-save-close').on('click', function () { save(true); });
     function act(doVal, confirmText, extra) {
         if (confirmText && !confirm(confirmText)) { applyMode(); return; }
@@ -490,11 +496,11 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             // Đang đứng ở chi nhánh nhập → nhận hàng; ở chi nhánh xuất (hoặc quản trị) → sửa; đã xác nhận / từ chối → chỉ xem.
             // Chờ nhận + đang đứng ở chi nhánh nhập → nhận hàng; bên xuất / kế toán → sửa được (cả phiếu đã xác nhận: tồn hai bên tự
             // tính lại theo số mới); bị từ chối hoặc không có quyền → chỉ xem.
-            if (+t.import_status === 2) mode = 'view';
-            else if (!confirmed && +t.to_blog_id === cur && +t.export_status === 1) mode = 'receive';
-            else if (+t.from_blog_id === cur || canAll) mode = 'edit';
-            else mode = 'view';
-            $.when(loadZones(+t.from_blog_id, $w.find('.gt-from-zone'), t.from_zone), +t.to_blog_id > 0 ? loadZones(+t.to_blog_id, $w.find('.gt-to-zone'), t.to_zone) : zoneOptions($w.find('.gt-to-zone'), [], t.to_zone)).always(function () { applyMode(); if (mode === 'edit') fetchStock(); });
+            // Mở phiếu = XEM; bấm Sửa mới sửa (bên xuất / kế toán; phiếu bị từ chối thì không). Chờ nhận + đang đứng ở chi nhánh
+            // nhập → xem kèm ô Số lượng nhập + ô tích xác nhận.
+            canEdit = +t.import_status !== 2 && (+t.from_blog_id === cur || canAll);
+            mode = !confirmed && +t.import_status !== 2 && +t.to_blog_id === cur && +t.export_status === 1 ? 'receive' : 'view';
+            $.when(loadZones(+t.from_blog_id, $w.find('.gt-from-zone'), t.from_zone), +t.to_blog_id > 0 ? loadZones(+t.to_blog_id, $w.find('.gt-to-zone'), t.to_zone) : zoneOptions($w.find('.gt-to-zone'), [], t.to_zone)).always(applyMode);
             if (/[?&]saved=1/.test(location.search)) msg('success', 'Đã ghi phiếu.');
         });
     });
