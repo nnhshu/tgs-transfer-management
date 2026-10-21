@@ -53,7 +53,8 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         var side = t.side || ($d.data('side'));
         $d.find('.gt-code').text(t.transfer_code);
         var b = (+t.export_status === 1 ? '<span class="badge bg-label-success">Đã duyệt xuất</span>' : '<span class="badge bg-label-secondary">Nháp</span>') + ' '
-            + (+t.export_status === 1 ? ({ 0: '<span class="badge bg-label-warning">Chờ nhận</span>', 1: '<span class="badge bg-label-success">Đã nhận</span>', 2: '<span class="badge bg-label-danger">Từ chối</span>' }[+t.import_status] || '') : '')
+            + (+t.export_status === 1 && +t.to_blog_id <= 0 ? '<span class="badge bg-label-secondary">Xuất ra ngoài hệ thống</span>' : '')
+            + (+t.export_status === 1 && +t.to_blog_id > 0 ? ({ 0: '<span class="badge bg-label-warning">Chờ nhận</span>', 1: '<span class="badge bg-label-success">Đã nhận</span>', 2: '<span class="badge bg-label-danger">Từ chối</span>' }[+t.import_status] || '') : '')
             + (+t.is_deleted ? ' <span class="badge bg-danger">Đã xoá</span>' : '');
         $d.find('.gt-badges').html(b);
         $d.find('.gt-from').html('<div>' + esc(t.from_blog_name) + ' <span class="text-muted">(blog ' + t.from_blog_id + ')</span></div><div>Chi nhánh: <b>' + esc(t.from_branch_code || 'chưa nối') + '</b></div><div>Phân kho: <b>' + esc(t.from_zone) + '</b></div>'
@@ -61,7 +62,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         $d.find('.gt-to').html('<div>' + esc(t.to_blog_name) + ' <span class="text-muted">(blog ' + t.to_blog_id + ')</span></div><div>Chi nhánh: <b>' + esc(t.to_branch_code || 'chưa nối') + '</b></div><div>Phân kho: <b>' + esc(t.to_zone) + '</b></div>'
             + (t.import_approved_at ? '<div class="text-muted small">' + (+t.import_status === 2 ? 'Từ chối' : 'Duyệt nhận') + ': ' + esc(t.import_approved_at) + '</div>' : '')
             + (t.reject_reason ? '<div class="text-danger small">Lý do: ' + esc(t.reject_reason) + '</div>' : ''));
-        $d.find('.gt-info').html('<div>Ngày: <b>' + esc(t.doc_date) + '</b></div><div>Loại: ' + (+t.transfer_type === 2 ? 'Trả về' : 'Chuyển đi') + '</div><div>Ghi chú: ' + esc(t.note || '') + '</div>');
+        $d.find('.gt-info').html('<div>Ngày: <b>' + esc(t.doc_date) + '</b></div><div>Loại: ' + (+t.transfer_type === 2 ? 'Trả về' : 'Chuyển đi') + '</div>' + (t.source_label ? '<div>Chứng từ gốc: <b>' + esc(t.source_label) + '</b></div>' : '') + '<div>Ghi chú: ' + esc(t.note || '') + '</div>');
         var $b = $d.find('.gt-items').empty(), tq = 0;
         (t.items || []).forEach(function (it, i) {
             tq += +it.quantity;
@@ -78,7 +79,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             else if (+t.import_status !== 1) btn('btn-outline-warning', 'bx-undo', 'Bỏ duyệt xuất', function () { act('unapprove_export', 'Bỏ duyệt xuất? Tồn trả về bên xuất.'); });
             if (+t.import_status !== 1) btn('btn-outline-danger', 'bx-trash', 'Xoá', function () { act('delete', 'Xoá phiếu chuyển kho?'); });
         }
-        if (inn && +t.export_status === 1) {
+        if (inn && +t.export_status === 1 && +t.to_blog_id > 0) {
             if (+t.import_status === 0) {
                 btn('btn-success', 'bx-check-double', 'Duyệt nhận', function () { act('approve_import', 'Xác nhận đã nhận đủ hàng? Tồn bên nhận cộng ngay.'); });
                 btn('btn-outline-danger', 'bx-x-circle', 'Từ chối', function () { var r = prompt('Lý do từ chối nhận:'); if (r !== null) act('reject', '', { reason: r }); });

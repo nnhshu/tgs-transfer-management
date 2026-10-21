@@ -50,6 +50,7 @@ $gt_titles = ['out' => 'Phiếu chuyển kho đi', 'in' => 'Phiếu chuyển kho
     function badgeOut(t) { return +t.export_status === 1 ? '<span class="badge bg-label-success">Đã duyệt</span>' : '<span class="badge bg-label-secondary">Nháp</span>'; }
     function badgeIn(t) {
         if (+t.export_status !== 1) return '';
+        if (+t.to_blog_id <= 0) return '<span class="badge bg-label-secondary">Ngoài hệ thống</span>';
         return { 0: '<span class="badge bg-label-warning">Chờ nhận</span>', 1: '<span class="badge bg-label-success">Đã nhận</span>', 2: '<span class="badge bg-label-danger">Từ chối</span>' }[+t.import_status] || '';
     }
     function load() {
