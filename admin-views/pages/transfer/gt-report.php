@@ -116,7 +116,7 @@ $gt_today = current_time('Y-m-d');
             });
             var countCol = mode === 'detail' ? 'code' : 'sku';
             $r.find('tfoot').html('<tr>' + cols.map(function (c) {
-                if (c[0] === countCol) return '<th>' + Object.keys(codes).length + '</th>';
+                if (c[0] === countCol) return '<th>' + rows.length.toLocaleString('vi-VN') + '</th>'; // như phần mềm cũ: đếm số dòng
                 if (c[2] && c[0] !== 'price') return '<th class="text-end">' + n(sum[c[0]]) + '</th>';
                 return '<th></th>';
             }).join('') + '</tr>');
