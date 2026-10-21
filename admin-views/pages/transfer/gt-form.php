@@ -20,8 +20,11 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         .gt-wrap .gt-tb { background: #f1f3f6; border: 1px solid #d5dae1; border-radius: 6px; padding: .3rem .5rem; }
         .gt-wrap .gt-tb .btn { padding: .2rem .6rem; font-size: .85rem; }
         .gt-wrap .gt-hd { background: #fff; border: 1px solid #d5dae1; border-radius: 6px; padding: .6rem .8rem; }
-        .gt-wrap .gt-hd .row > div { display: flex; align-items: center; gap: .5rem; margin-bottom: .35rem; }
-        .gt-wrap .gt-hd label { width: 110px; flex: 0 0 110px; margin: 0; font-size: .85rem; font-weight: 600; color: #344; }
+        .gt-wrap .gt-hide { display: none !important; }
+        .gt-wrap .gt-hd .gt-f { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+        .gt-wrap .gt-hd .gt-f > .form-control, .gt-wrap .gt-hd .gt-f > .form-select { flex: 1 1 auto; min-width: 0; }
+        .gt-wrap .gt-hd label { width: 115px; flex: 0 0 115px; margin: 0; font-size: .85rem; font-weight: 600; color: #344; }
+        .gt-wrap .gt-hd label.gt-l2 { width: auto; flex: 0 0 auto; margin-left: .5rem; }
         .gt-wrap .gt-hd .form-control, .gt-wrap .gt-hd .form-select { font-size: .85rem; }
         .gt-wrap .gt-ro .form-control, .gt-wrap .gt-ro .form-select { pointer-events: none; background: #f3f4f6; }
         .gt-wrap .gt-grid { border: 1px solid #b8c4d6; border-radius: 6px; overflow: auto; max-height: 60vh; background: #fff; }
@@ -45,28 +48,28 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     <div class="d-flex align-items-center gap-1 flex-wrap gt-tb mb-2">
         <strong class="me-3"><i class="bx bx-transfer-alt me-1"></i>Nhập- xuất kho nội bộ</strong>
         <a class="btn btn-sm btn-outline-success" href="<?php echo esc_url(tgs_url('transfer-export-add')); ?>"><i class="bx bx-plus me-1"></i>Thêm</a>
-        <button type="button" class="btn btn-sm btn-primary gt-save" style="display:none"><i class="bx bx-save me-1"></i>Ghi</button>
-        <button type="button" class="btn btn-sm btn-outline-danger gt-delete" style="display:none"><i class="bx bx-x me-1"></i>Xóa</button>
-        <button type="button" class="btn btn-sm btn-success gt-confirm" style="display:none"><i class="bx bx-check-double me-1"></i>Xác nhận đã nhận đủ hàng</button>
-        <button type="button" class="btn btn-sm btn-outline-warning gt-unconfirm" style="display:none"><i class="bx bx-undo me-1"></i>Bỏ xác nhận</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary gt-print"><i class="bx bx-printer me-1"></i>In</button>
+        <button type="button" class="btn btn-sm btn-primary gt-save gt-hide"><i class="bx bx-save me-1"></i>Ghi</button>
+        <button type="button" class="btn btn-sm btn-outline-danger gt-delete gt-hide"><i class="bx bx-x me-1"></i>Xóa</button>
+        <button type="button" class="btn btn-sm btn-success gt-confirm gt-hide"><i class="bx bx-check-double me-1"></i>Xác nhận đã nhận đủ hàng</button>
+        <button type="button" class="btn btn-sm btn-outline-warning gt-unconfirm gt-hide"><i class="bx bx-undo me-1"></i>Bỏ xác nhận</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary gt-print gt-hide"><i class="bx bx-printer me-1"></i>In</button>
         <a class="btn btn-sm btn-outline-secondary" href="<?php echo esc_url(tgs_url('ticket-transfer-exports')); ?>"><i class="bx bx-exit me-1"></i>Đóng</a>
     </div>
-    <div class="alert py-2 gt-msg" style="display:none"></div>
+    <div class="alert py-2 gt-msg gt-hide"></div>
 
     <div class="gt-hd mb-2">
-        <div class="row g-0 gx-4">
+        <div class="row gx-4">
             <div class="col-lg-6">
-                <div><label>Lý do</label><select class="form-select form-select-sm gt-reason"></select><a href="#" class="gt-reason-refresh" title="Kéo lại danh mục lý do từ phần mềm kế toán"><i class="bx bx-refresh"></i></a></div>
-                <div><label>Chi nhánh xuất</label><select class="form-select form-select-sm gt-from-site"></select></div>
-                <div><label>Kho xuất</label><select class="form-select form-select-sm gt-from-zone"></select></div>
-                <div><label>Diễn giải</label><input class="form-control form-control-sm gt-note"></div>
+                <div class="gt-f"><label>Lý do</label><select class="form-select form-select-sm gt-reason"></select><a href="#" class="gt-reason-refresh" title="Kéo lại danh mục lý do từ phần mềm kế toán"><i class="bx bx-refresh"></i></a></div>
+                <div class="gt-f"><label>Chi nhánh xuất</label><select class="form-select form-select-sm gt-from-site"></select></div>
+                <div class="gt-f"><label>Kho xuất</label><select class="form-select form-select-sm gt-from-zone"></select></div>
+                <div class="gt-f"><label>Diễn giải</label><input class="form-control form-control-sm gt-note"></div>
             </div>
             <div class="col-lg-6">
-                <div><label>Số phiếu</label><input class="form-control form-control-sm gt-code" disabled placeholder="(tự sinh khi ghi)"><label style="width:auto;flex:0 0 auto">Ngày</label><input type="date" class="form-control form-control-sm gt-date" style="max-width:170px" value="<?php echo esc_attr(current_time('Y-m-d')); ?>"></div>
-                <div><label>Chi nhánh nhập</label><select class="form-select form-select-sm gt-to-site"></select></div>
-                <div><label>Kho nhập</label><select class="form-select form-select-sm gt-to-zone"></select></div>
-                <div><label>Trạng thái</label><input class="form-control form-control-sm gt-status" disabled value="Mới"><label style="width:auto;flex:0 0 auto">Chứng từ gốc</label><input class="form-control form-control-sm gt-src" disabled style="max-width:170px"></div>
+                <div class="gt-f"><label>Số phiếu</label><input class="form-control form-control-sm gt-code" disabled placeholder="(tự sinh khi ghi)"><label class="gt-l2">Ngày</label><input type="date" class="form-control form-control-sm gt-date" style="max-width:170px;flex:0 0 170px" value="<?php echo esc_attr(current_time('Y-m-d')); ?>"></div>
+                <div class="gt-f"><label>Chi nhánh nhập</label><select class="form-select form-select-sm gt-to-site"></select></div>
+                <div class="gt-f"><label>Kho nhập</label><select class="form-select form-select-sm gt-to-zone"></select></div>
+                <div class="gt-f"><label>Trạng thái</label><input class="form-control form-control-sm gt-status" disabled value="Mới"><label class="gt-l2">Chứng từ gốc</label><input class="form-control form-control-sm gt-src" disabled style="max-width:170px;flex:0 0 170px"></div>
             </div>
         </div>
     </div>
@@ -95,11 +98,11 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     var fmt = function (n) { return (+n || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 }); };
     var esc = function (s) { return $('<div>').text(s == null ? '' : s).html(); };
     function ajax(action, data) { return $.post(ajaxurl, $.extend({ action: 'tgs_gt_' + action, nonce: nonce }, data || {})); }
-    function msg(type, text) { $w.find('.gt-msg').removeClass('alert-success alert-danger alert-warning').addClass('alert-' + type).text(text).show(); }
+    function msg(type, text) { $w.find('.gt-msg').removeClass('alert-success alert-danger alert-warning').addClass('alert-' + type).text(text).removeClass('gt-hide'); }
     function editable() { return mode === 'new' || mode === 'edit'; }
-    function zoneOptions($sel, zones, value) {
+    function zoneOptions($sel, zones, value, emptyText) {
         $sel.empty();
-        if (!zones.length) $sel.append('<option value="">(chưa có kho — đồng bộ phân kho)</option>');
+        if (!zones.length) $sel.append($('<option value="">').text(emptyText || '(chưa có kho — đồng bộ phân kho)'));
         zones.forEach(function (z) { $sel.append($('<option>').val(z.code).text(z.code + ' — ' + z.name)); });
         if (value) { if (!$sel.find('option').filter(function () { return this.value === value; }).length) $sel.append($('<option>').val(value).text(value)); $sel.val(value); }
     }
@@ -224,10 +227,12 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     /* ---------------- chế độ / nút ---------------- */
     function applyMode() {
         $w.find('.gt-hd').toggleClass('gt-ro', !editable());
-        $w.find('.gt-save').toggle(editable());
-        $w.find('.gt-confirm').toggle(mode === 'receive');
-        $w.find('.gt-unconfirm').toggle(!!(loaded && +loaded.import_status === 1 && (canAll || +loaded.to_blog_id === cur)));
-        $w.find('.gt-delete').toggle(!!(loaded && mode === 'edit'));
+        // Phiếu mới: chỉ Ghi · Đóng. Phiếu đã ghi: thêm Xóa (bên xuất, chưa xác nhận), Xác nhận (bên nhập), Bỏ xác nhận, In.
+        $w.find('.gt-save').toggleClass('gt-hide', !editable());
+        $w.find('.gt-confirm').toggleClass('gt-hide', mode !== 'receive');
+        $w.find('.gt-unconfirm').toggleClass('gt-hide', !(loaded && +loaded.import_status === 1 && (canAll || +loaded.to_blog_id === cur)));
+        $w.find('.gt-delete').toggleClass('gt-hide', !(loaded && mode === 'edit'));
+        $w.find('.gt-print').toggleClass('gt-hide', !loaded);
         $w.find('.gt-from-site').prop('disabled', !(editable() && canAll && !loaded));
         $w.find('.gt-help').toggle(editable());
         render(editable() && !loaded);
@@ -259,12 +264,12 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         var b = +this.value, keepTo = $w.find('.gt-to-site').val();
         loadZones(b, $w.find('.gt-from-zone'), '').always(function () { render(false); });
         fillSites($w.find('.gt-to-site'), +keepTo === b ? '' : keepTo, b);
-        if (+keepTo === b) zoneOptions($w.find('.gt-to-zone'), [], '');
+        if (+keepTo === b) zoneOptions($w.find('.gt-to-zone'), [], '', '— Chọn chi nhánh nhập trước —');
     });
     $w.find('.gt-to-site').on('change', function () {
         var b = +this.value;
         if (b) loadZones(b, $w.find('.gt-to-zone'), loaded && +loaded.to_blog_id === b ? loaded.to_zone : '').always(function () { render(false); });
-        else { zoneOptions($w.find('.gt-to-zone'), [], ''); render(false); }
+        else { zoneOptions($w.find('.gt-to-zone'), [], '', '— Chọn chi nhánh nhập trước —'); render(false); }
     });
 
     /* ---------------- ghi / thao tác ---------------- */
@@ -339,7 +344,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             fillSites($w.find('.gt-from-site'), cur);
             fillSites($to, '', cur);
             zoneOptions($w.find('.gt-from-zone'), r.data.zones, '');
-            zoneOptions($w.find('.gt-to-zone'), [], '');
+            zoneOptions($w.find('.gt-to-zone'), [], '', '— Chọn chi nhánh nhập trước —');
             reasonOptions(r.data.reasons, (r.data.reasons.find(function (x) { return x.isDefault; }) || {}).code);
             applyMode();
             prefillFromPo($to);
