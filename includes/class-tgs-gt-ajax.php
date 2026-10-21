@@ -24,7 +24,7 @@ class TGS_GT_Ajax
 
     public static function init()
     {
-        foreach (['options', 'products', 'save', 'get', 'list', 'action', 'htlist', 'report'] as $a) {
+        foreach (['options', 'products', 'save', 'get', 'list', 'action', 'htlist', 'report', 'catalog', 'stock'] as $a) {
             add_action('wp_ajax_tgs_gt_' . $a, [__CLASS__, $a]);
         }
     }
@@ -143,6 +143,46 @@ class TGS_GT_Ajax
             ];
         }
         wp_send_json_success(['items' => $items]);
+    }
+
+    /**
+     * Danh mục mặt hàng gọn để form tìm NGAY TRÊN TRÌNH DUYỆT (khoảng 20 nghìn mã — gõ tới đâu gợi ý tới đó, không gọi máy
+     * chủ mỗi phím): {ver, rows: [[id, mã, tên, ĐVT, mã vạch, giá, thuế]]}. Gửi kèm ver đang giữ: chưa đổi thì {same: true}.
+     */
+    public static function catalog()
+    {
+        self::guard();
+        global $wpdb;
+        $P = $wpdb->base_prefix . 'global_product_name';
+        $ver = (string) $wpdb->get_var("SELECT CONCAT(COUNT(*), '-', COALESCE(MAX(updated_at), '')) FROM {$P} WHERE is_deleted = 0 OR is_deleted IS NULL");
+        if ((string) self::post('ver') === $ver) {
+            wp_send_json_success(['same' => true, 'ver' => $ver]);
+        }
+        $rows = $wpdb->get_results(
+            "SELECT global_product_name_id, global_product_sku, global_product_name, global_product_unit, global_product_barcode_main, global_product_price, global_product_tax
+               FROM {$P} WHERE (is_deleted = 0 OR is_deleted IS NULL) AND global_product_sku <> ''",
+            ARRAY_N
+        ) ?: [];
+        foreach ($rows as &$r) {
+            $r = [(int) $r[0], (string) $r[1], (string) $r[2], (string) $r[3], (string) $r[4], (float) $r[5], (float) $r[6]];
+        }
+        unset($r);
+        wp_send_json_success(['ver' => $ver, 'rows' => $rows]);
+    }
+
+    /** Tồn kho thực tế của một số mã hàng tại một website (chi nhánh xuất): {sku: SL}. */
+    public static function stock()
+    {
+        self::guard();
+        $blog = (int) self::post('blog_id', get_current_blog_id()) ?: get_current_blog_id();
+        $skus = array_values(array_filter(array_map('strval', (array) json_decode((string) self::post('skus', '[]'), true)), 'strlen'));
+        $out = [];
+        if ($skus && class_exists('TGS_Global_Product_Source')) {
+            foreach ((array) TGS_Global_Product_Source::get_stock_for_skus(array_slice($skus, 0, 500), $blog) as $sku => $s) {
+                $out[(string) $sku] = (float) ($s['actual_stock'] ?? 0);
+            }
+        }
+        wp_send_json_success($out);
     }
 
     public static function save()

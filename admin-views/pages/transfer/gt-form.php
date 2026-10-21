@@ -171,15 +171,60 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     function hideSugg() { $sg.addClass('gt-hide'); sugg = []; sel = -1; }
     function showSugg(items) {
         sugg = items; sel = items.length ? 0 : -1;
-        $sg.html(items.length ? items.map(function (p, k) { return '<div data-k="' + k + '" class="' + (k === 0 ? 'on' : '') + '"><b class="font-monospace">' + esc(p.sku) + '</b> ' + esc(p.name) + '<small>tồn ' + fmt(p.stock) + ' ' + esc(p.unit || '') + '</small></div>'; }).join('') : '<div class="text-muted">Không thấy mã hàng</div>');
+        $sg.html(items.length ? items.map(function (p, k) { return '<div data-k="' + k + '" class="' + (k === 0 ? 'on' : '') + '"><b class="font-monospace">' + esc(p.sku) + '</b> ' + esc(p.name) + '<small>' + esc(p.unit || '') + (p.stock !== undefined ? ' · tồn ' + fmt(p.stock) : '') + '</small></div>'; }).join('') : '<div class="text-muted">Không thấy mã hàng</div>');
         $sg.css({ left: $in.position().left, top: $in.position().top + $in.outerHeight() + 2 }).removeClass('gt-hide');
     }
-    function search(q) { return ajax('products', { search: q }).then(function (r) { return r.success ? r.data.items : []; }); }
-    function pick(p) { hideSugg(); $in.val(''); var i = addProduct(p, 1); render(); focusQty(i); }
+    /*
+     * Danh mục mặt hàng giữ tại trình duyệt (localStorage, kiểm phiên bản mỗi lần mở form) → tìm tức thì, không gọi máy chủ
+     * mỗi phím. Chưa nạp xong thì tạm hỏi máy chủ.
+     */
+    var CAT = null, CAT_KEY = 'tgs_gt_catalog_v1';
+    function norm(x) { return String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd'); }
+    function buildCat(rows) {
+        CAT = rows.map(function (x) { return { product_id: x[0], sku: x[1], name: x[2], unit: x[3], barcode: x[4], price: x[5], tax: x[6], k: norm(x[1] + ' ' + x[2] + ' ' + x[4]) }; });
+    }
+    function loadCatalog() {
+        var cached = null;
+        try { cached = JSON.parse(localStorage.getItem(CAT_KEY) || 'null'); } catch (e) {}
+        if (cached && cached.rows) buildCat(cached.rows);
+        ajax('catalog', { ver: cached && cached.ver || '' }).done(function (r) {
+            if (!r.success || r.data.same) return;
+            buildCat(r.data.rows);
+            try { localStorage.setItem(CAT_KEY, JSON.stringify(r.data)); } catch (e) {}
+        });
+    }
+    function localSearch(q) {
+        var raw = String(q).trim(), n = norm(raw), toks = n.split(/\s+/).filter(Boolean), exact = [], pre = [], other = [];
+        for (var i = 0; i < CAT.length; i++) {
+            var p = CAT[i], ps = p.sku.toLowerCase();
+            if (ps === n || (p.barcode && p.barcode === raw)) exact.push(p);
+            else if (ps.indexOf(n) === 0) { if (pre.length < 30) pre.push(p); }
+            else if (other.length < 30 && toks.every(function (t) { return p.k.indexOf(t) >= 0; })) other.push(p);
+        }
+        return exact.concat(pre, other).slice(0, 30);
+    }
+    function search(q) {
+        if (CAT) return $.Deferred().resolve(localSearch(q)).promise();
+        return ajax('products', { search: q }).then(function (r) { return r.success ? r.data.items : []; });
+    }
+    /** Tồn kho tại chi nhánh xuất của các mã — điền thẳng vào ô Tồn, không vẽ lại lưới (giữ con trỏ đang gõ). */
+    function fetchStock(skus) {
+        skus = (skus || lines.map(function (l) { return l.sku; })).filter(Boolean);
+        if (!skus.length) return;
+        ajax('stock', { blog_id: $w.find('.gt-from-site').val() || cur, skus: JSON.stringify(skus) }).done(function (r) {
+            if (!r.success) return;
+            lines.forEach(function (l, i) {
+                if (r.data[l.sku] === undefined) return;
+                l.stock = r.data[l.sku];
+                $w.find('.gt-lines tr[data-i="' + i + '"] td').eq(6).text(fmt(l.stock));
+            });
+        });
+    }
+    function pick(p) { hideSugg(); $in.val(''); var i = addProduct(p, 1); render(); focusQty(i); fetchStock([p.sku]); }
     $in.on('input', function () {
         var q = this.value.trim(); clearTimeout(timer);
         if (q.length < 2) return hideSugg();
-        timer = setTimeout(function () { lastQ = q; search(q).then(function (items) { if (lastQ === q) showSugg(items); }); }, 200);
+        timer = setTimeout(function () { lastQ = q; search(q).then(function (items) { if (lastQ === q) showSugg(items); }); }, CAT ? 0 : 200);
     }).on('keydown', function (e) {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             if (!sugg.length) return; e.preventDefault();
@@ -210,7 +255,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
                 var p = items.find(function (x) { return String(x.sku).toUpperCase() === sku.toUpperCase() || String(x.barcode) === sku; });
                 if (p) addProduct(p, qty); else miss.push(sku);
             }).always(function () {
-                if (--left === 0) { render(); msg(miss.length ? 'warning' : 'success', miss.length ? 'Không thấy mã: ' + miss.join(', ') : 'Đã thêm ' + rows.length + ' dòng.'); $in.focus(); }
+                if (--left === 0) { render(); fetchStock(); msg(miss.length ? 'warning' : 'success', miss.length ? 'Không thấy mã: ' + miss.join(', ') : 'Đã thêm ' + rows.length + ' dòng.'); $in.focus(); }
             });
         });
     }).on('blur', function () { setTimeout(hideSugg, 150); });
@@ -273,7 +318,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     }
     $w.find('.gt-from-site').on('change', function () {
         var b = +this.value, keepTo = $w.find('.gt-to-site').val();
-        loadZones(b, $w.find('.gt-from-zone'), '').always(render);
+        loadZones(b, $w.find('.gt-from-zone'), '').always(function () { render(); fetchStock(); });
         fillSites($w.find('.gt-to-site'), +keepTo === b ? '' : keepTo, b);
         if (+keepTo === b) zoneOptions($w.find('.gt-to-zone'), [], '', '— Chọn chi nhánh nhập trước —');
     });
@@ -348,11 +393,12 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
                 var p = list.find(function (x) { return String(x.sku).toUpperCase() === sku.toUpperCase(); });
                 if (p) { var i = addProduct(p, +it.quantity || 1); lines[i].note = it.note || ''; }
                 else lines.push({ sku: sku, product_name: it.name || it.product_name || sku, unit_name: '', quantity: +it.quantity || 1, price: 0, tax_percent: 0, note: it.note || '' });
-            }).always(function () { if (--pending === 0) render(); });
+            }).always(function () { if (--pending === 0) { render(); fetchStock(); } });
         });
     }
 
     /* ---------------- nạp ---------------- */
+    loadCatalog();
     ajax('options', { blog_id: cur }).done(function (r) {
         if (!r.success) return msg('danger', r.data && r.data.message || 'Không tải được danh mục');
         sites = r.data.sites; canAll = !!r.data.canAll;
@@ -382,7 +428,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             else if (+t.to_blog_id === cur && +t.export_status === 1) mode = 'receive';
             else if (+t.from_blog_id === cur || canAll) mode = 'edit';
             else mode = 'view';
-            $.when(loadZones(+t.from_blog_id, $w.find('.gt-from-zone'), t.from_zone), +t.to_blog_id > 0 ? loadZones(+t.to_blog_id, $w.find('.gt-to-zone'), t.to_zone) : zoneOptions($w.find('.gt-to-zone'), [], t.to_zone)).always(applyMode);
+            $.when(loadZones(+t.from_blog_id, $w.find('.gt-from-zone'), t.from_zone), +t.to_blog_id > 0 ? loadZones(+t.to_blog_id, $w.find('.gt-to-zone'), t.to_zone) : zoneOptions($w.find('.gt-to-zone'), [], t.to_zone)).always(function () { applyMode(); if (mode === 'edit') fetchStock(); });
             if (/[?&]saved=1/.test(location.search)) msg('success', 'Đã ghi phiếu.');
         });
     });
