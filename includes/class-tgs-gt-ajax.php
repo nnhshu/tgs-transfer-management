@@ -7,6 +7,8 @@
  *   tgs_gt_get        chi tiết phiếu
  *   tgs_gt_list       danh sách theo chiều (out | in | all), trạng thái, ngày, tìm
  *   tgs_gt_action     approve_export · unapprove_export · approve_import · unapprove_import · reject · delete
+ *   tgs_gt_htlist     màn "Phiếu chuyển kho": trạng thái (chờ xác nhận / đã xác nhận / tất cả), từ – đến, chi nhánh, tìm nhanh
+ *   tgs_gt_report     "Báo cáo chuyển kho nội bộ": chi tiết (mode=detail) / nhóm theo mặt hàng (mode=item)
  * Quyền: đăng nhập + thành viên website; bên ĐI sửa / xoá / duyệt xuất, bên ĐẾN duyệt nhận / từ chối (super admin làm được cả hai).
  */
 if (!defined('ABSPATH')) {
@@ -19,7 +21,7 @@ class TGS_GT_Ajax
 
     public static function init()
     {
-        foreach (['options', 'products', 'save', 'get', 'list', 'action'] as $a) {
+        foreach (['options', 'products', 'save', 'get', 'list', 'action', 'htlist', 'report'] as $a) {
             add_action('wp_ajax_tgs_gt_' . $a, [__CLASS__, $a]);
         }
     }
@@ -138,6 +140,35 @@ class TGS_GT_Ajax
         self::reply(TGS_Global_Transfer::search(get_current_blog_id(), $f));
     }
 
+    /** Bộ lọc chung của danh sách / báo cáo từ POST. */
+    private static function filters()
+    {
+        $f = [];
+        foreach (['status', 'from', 'to', 'search', 'from_zone', 'to_zone'] as $k) {
+            if (isset($_POST[$k])) {
+                $f[$k] = sanitize_text_field(self::post($k));
+            }
+        }
+        foreach (['blog_id', 'from_blog', 'to_blog'] as $k) {
+            if (isset($_POST[$k]) && self::post($k) !== '' && self::post($k) !== 'all') {
+                $f[$k] = (int) self::post($k);
+            }
+        }
+        return $f;
+    }
+
+    public static function htlist()
+    {
+        self::guard();
+        self::reply(TGS_Global_Transfer::list_rows(self::filters()));
+    }
+
+    public static function report()
+    {
+        self::guard();
+        self::reply(TGS_Global_Transfer::report(self::filters(), self::post('mode') === 'item' ? 'item' : 'detail'));
+    }
+
     public static function action()
     {
         self::guard();
@@ -162,7 +193,14 @@ class TGS_GT_Ajax
                 $res = TGS_Global_Transfer::unapprove_export($id);
                 break;
             case 'approve_import':
-                $res = TGS_Global_Transfer::approve_import($id);
+                // Số lượng nhập từng dòng (bên nhận ghi khi xác nhận); không gửi = nhận đủ.
+                $received = [];
+                foreach ((array) json_decode((string) self::post('received', '[]'), true) as $item_id => $q) {
+                    if ((int) $item_id > 0 && is_numeric($q)) {
+                        $received[(int) $item_id] = (float) $q;
+                    }
+                }
+                $res = TGS_Global_Transfer::approve_import($id, $received);
                 break;
             case 'unapprove_import':
                 $res = TGS_Global_Transfer::unapprove_import($id);

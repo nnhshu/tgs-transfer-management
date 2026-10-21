@@ -69,17 +69,20 @@ class TGS_Transfer_Management
         TGS_GT_Ajax::init();
     }
 
-    /** Route giữ nguyên slug cũ (link / bookmark / phân quyền không đổi), trỏ về màn mới. */
+    /**
+     * Route giữ nguyên slug cũ (link / bookmark / phân quyền không đổi), trỏ về màn mới:
+     *   Phiếu chuyển kho (danh sách) · Nhập- xuất kho nội bộ (phiếu, ?id= mở phiếu) · Báo cáo chuyển kho nội bộ.
+     */
     public function register_routes($routes)
     {
         $d = TGS_TRANSFER_PLUGIN_DIR . 'admin-views/pages/transfer/';
         return array_merge($routes, [
-            'transfer-export-add' => ['Tạo phiếu chuyển kho', $d . 'gt-form.php'],
-            'ticket-transfer-exports' => ['Phiếu chuyển kho đi', $d . 'list-export.php'],
-            'ticket-transfer-imports' => ['Phiếu chuyển kho đến', $d . 'list-import.php'],
-            'transfer-report' => ['Tất cả phiếu chuyển kho', $d . 'list-all.php'],
-            'ticket-transfer-export-detail' => ['Chi tiết phiếu chuyển kho', $d . 'gt-detail.php'],
-            'ticket-transfer-import-detail' => ['Chi tiết phiếu chuyển kho', $d . 'gt-detail.php'],
+            'transfer-export-add' => ['Phiếu chuyển kho', $d . 'gt-form.php'],
+            'ticket-transfer-exports' => ['Danh sách phiếu chuyển kho', $d . 'gt-list.php'],
+            'ticket-transfer-imports' => ['Danh sách phiếu chuyển kho', $d . 'gt-list.php'],
+            'ticket-transfer-export-detail' => ['Phiếu chuyển kho', $d . 'gt-form.php'],
+            'ticket-transfer-import-detail' => ['Phiếu chuyển kho', $d . 'gt-form.php'],
+            'transfer-report' => ['Báo cáo chuyển kho nội bộ', $d . 'gt-report.php'],
         ]);
     }
 
@@ -98,10 +101,9 @@ class TGS_Transfer_Management
             </a>
             <ul class="menu-sub">
                 <?php
+                $item('ticket-transfer-exports', 'bx-list-ul', 'Phiếu chuyển kho');
                 $item('transfer-export-add', 'bx-plus', 'Tạo phiếu chuyển kho');
-                $item('ticket-transfer-exports', 'bx-log-out-circle', 'Chuyển đi');
-                $item('ticket-transfer-imports', 'bx-log-in-circle', 'Chuyển đến (chờ nhận)');
-                $item('transfer-report', 'bx-list-ul', 'Tất cả phiếu');
+                $item('transfer-report', 'bx-bar-chart-alt-2', 'Báo cáo chuyển kho nội bộ');
                 ?>
             </ul>
         </li>
