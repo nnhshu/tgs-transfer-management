@@ -157,7 +157,40 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
                 if (+loaded.import_status === 1) msg('warning', 'Phiếu bên nhận đã nhận — sửa thì tồn hai bên tự cập nhật theo số mới.');
                 render();
             });
+        } else {
+            prefillFromPo($to);
         }
     });
+
+    /**
+     * Điền sẵn từ PO / quét tồn (tgs_po_adjustment): dữ liệu để ở sessionStorage
+     * (tgs_poa_copy_items | tgs_poa_ticket_prefill) {ticket_type, person: {id = blog nhận}, items: [{sku, quantity, note}], note}.
+     */
+    function prefillFromPo($to) {
+        var data = null, key = null;
+        ['tgs_poa_copy_items', 'tgs_poa_ticket_prefill'].some(function (k) {
+            try { var v = JSON.parse(sessionStorage.getItem(k) || 'null'); if (v && /transfer|internal_(export|return)/.test(v.ticket_type || '')) { data = v; key = k; return true; } } catch (e) {}
+            return false;
+        });
+        if (!data) return;
+        try { sessionStorage.removeItem(key); } catch (e) {}
+        if (/return/.test(data.ticket_type)) $w.find('.gt-type').val('2');
+        if (data.note || data.po_code) $w.find('.gt-note').val(data.note || ('Tạo từ PO ' + data.po_code));
+        var dest = data.person && +data.person.id;
+        if (dest && dest !== cur) $to.val(dest).trigger('change');
+        var items = (data.items || []).filter(function (it) { return (it.sku || it.product_sku); });
+        var pending = items.length;
+        if (!pending) return;
+        msg('success', 'Đã điền sẵn ' + pending + ' dòng từ PO — kiểm tra phân kho, số lượng rồi lưu.');
+        items.forEach(function (it) {
+            var sku = String(it.sku || it.product_sku);
+            ajax('products', { search: sku }).done(function (r) {
+                var p = (r.success ? r.data.items : []).find(function (x) { return String(x.sku).toUpperCase() === sku.toUpperCase(); });
+                lines.push(p
+                    ? { product_id: p.product_id, sku: p.sku, product_name: p.name, unit_name: p.unit, quantity: +it.quantity || 1, price: p.price, tax_percent: p.tax, stock: p.stock, note: it.note || '' }
+                    : { sku: sku, product_name: it.name || it.product_name || sku, unit_name: '', quantity: +it.quantity || 1, price: 0, tax_percent: 0, note: it.note || '' });
+            }).always(function () { if (--pending === 0) render(); });
+        });
+    }
 })(jQuery);
 </script>
