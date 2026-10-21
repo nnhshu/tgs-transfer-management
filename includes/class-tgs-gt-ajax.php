@@ -74,7 +74,7 @@ class TGS_GT_Ajax
                 'product_id' => (int) $p['global_product_name_id'], 'sku' => (string) $p['global_product_sku'], 'name' => (string) $p['global_product_name'],
                 'unit' => (string) ($p['global_product_unit'] ?? ''), 'barcode' => (string) ($p['global_product_barcode_main'] ?? ''),
                 'tax' => (float) ($p['global_product_tax'] ?? 0), 'price' => (float) ($p['global_product_price'] ?? 0),
-                'stock' => (float) ($p['actual_stock'] ?? 0), 'is_tracking' => (int) ($p['global_product_is_tracking'] ?? 0),
+                'stock' => (float) ($p['actual_stock'] ?? 0),
             ];
         }
         wp_send_json_success(['items' => $items]);
