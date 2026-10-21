@@ -27,6 +27,17 @@ define('TGS_TRANSFER_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('TGS_TRANSFER_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('TGS_TRANSFER_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
+/*
+ * Link tới một màn của dashboard. Bản gốc chỉ khai báo trong file thanh menu (header-mega-nav / sidebar) của
+ * tgs_shop_management — màn mở dạng tab không nạp thanh menu thì hàm chưa có → lỗi nghiêm trọng. Khai báo sẵn ở đây.
+ */
+if (!function_exists('tgs_url')) {
+    function tgs_url($view)
+    {
+        return admin_url('admin.php?page=tgs-shop-management&view=' . $view);
+    }
+}
+
 class TGS_Transfer_Management
 {
     private static $instance = null;
