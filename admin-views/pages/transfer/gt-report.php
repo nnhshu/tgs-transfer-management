@@ -91,6 +91,7 @@ $gt_today = current_time('Y-m-d');
         if (c[0] === 'code') return '<td class="font-monospace"><a href="' + editUrl + row.transfer_id + '">' + esc(v) + '</a></td>';
         if (c[0] === 'doc_date') return '<td>' + d(v) + '</td>';
         if (/_at$/.test(c[0])) return '<td>' + dt(v) + '</td>';
+        if (c[0] === 'from_name' || c[0] === 'to_name') return '<td title="' + esc(row[c[0] === 'from_name' ? 'from_site' : 'to_site']) + '">' + esc(v) + '</td>';
         return c[2] ? '<td class="text-end">' + n(v) + '</td>' : '<td>' + esc(v) + '</td>';
     }
     function head() {
@@ -145,7 +146,6 @@ $gt_today = current_time('Y-m-d');
             var t = s.name + (s.branchCode ? ' — ' + s.branchCode : '');
             $r.find('.gt-blog,.gt-fblog,.gt-tblog').append($('<option>').val(s.blogId).text(t));
         });
-        $r.find('.gt-blog').val(String(me));
         head();
     });
 })(jQuery);

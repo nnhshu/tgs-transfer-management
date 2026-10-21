@@ -85,7 +85,7 @@ $gt_today = current_time('Y-m-d');
                     + '<td class="font-monospace">' + esc(t.code) + (t.rejected ? ' <span class="badge bg-danger">Từ chối</span>' : '') + (!t.exported ? ' <span class="badge bg-secondary">Nháp</span>' : '') + '</td>'
                     + '<td>' + d(t.doc_date) + '</td><td>' + esc(t.note) + '</td><td>' + esc(t.user_id) + '</td><td>' + esc(t.approved_by) + '</td>'
                     + '<td>' + dt(t.created_at) + '</td><td>' + dt(t.approved_at) + '</td>'
-                    + '<td>' + esc(t.from_name) + (t.from_zone ? ' · ' + esc(t.from_zone) : '') + '</td><td>' + esc(t.to_name) + (t.to_zone ? ' · ' + esc(t.to_zone) : '') + '</td>'
+                    + '<td title="' + esc(t.from_site) + '">' + esc(t.from_name) + '</td><td title="' + esc(t.to_site) + '">' + esc(t.to_name) + '</td>'
                     + '<td>' + esc(t.updated_by) + '</td><td>' + dt(t.updated_at) + '</td>'
                 ).appendTo($b);
             });
