@@ -1,7 +1,7 @@
 <?php
 /**
  * Phiếu chuyển kho — "Nhập-Xuất kho nội bộ" (?id= để mở phiếu đã có). Bố cục theo form phiếu chuyển kho của phần mềm cũ:
- *   thanh công cụ (Thêm · Ghi · Ghi và Đóng · Nạp · In · Xóa · Đóng);
+ *   thanh công cụ gọn: Ghi · Ghi và Đóng · Đóng (phiếu đã ghi thêm Xóa / In tuỳ quyền);
  *   khối trái 2 cột: Chi nhánh xuất | Chi nhánh nhập · Kho xuất | Kho nhập · Diễn giải;
  *   khối giữa: Số phiếu · Ngày · Trạng thái;
  *   khối phải "Thủ kho nhập xác nhận": ô tích "Xác nhận đã nhận đủ hàng" (bên nhập tích = duyệt nhận, bỏ tích = bỏ xác nhận);
@@ -63,10 +63,8 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
 
     <div class="gt-tb">
         <span class="gt-title"><i class="bx bx-transfer-alt"></i> Nhập-Xuất kho nội bộ</span>
-        <a href="<?php echo esc_url(tgs_url('transfer-export-add')); ?>"><i class="bx bx-plus text-success"></i>Thêm</a>
         <button type="button" class="gt-save gt-hide"><i class="bx bx-save text-primary"></i>Ghi</button>
         <button type="button" class="gt-save-close gt-hide"><i class="bx bx-save"></i>Ghi và Đóng</button>
-        <button type="button" class="gt-reload"><i class="bx bx-refresh text-success"></i>Nạp</button>
         <button type="button" class="gt-print gt-hide"><i class="bx bx-printer"></i>In</button>
         <button type="button" class="gt-delete gt-hide"><i class="bx bx-x text-danger"></i>Xóa</button>
         <span class="sep"></span>
@@ -347,7 +345,6 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     }
     $w.find('.gt-save').on('click', function () { save(false); });
     $w.find('.gt-save-close').on('click', function () { save(true); });
-    $w.find('.gt-reload').on('click', function () { location.reload(); });
     function act(doVal, confirmText, extra) {
         if (confirmText && !confirm(confirmText)) { applyMode(); return; }
         ajax('action', $.extend({ transfer_id: id, do: doVal }, extra || {})).done(function (r) {
@@ -408,7 +405,8 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             fillSites($to, '', cur);
             zoneOptions($w.find('.gt-from-zone'), r.data.zones, '');
             zoneOptions($w.find('.gt-to-zone'), [], '', '— Chọn chi nhánh nhập trước —');
-            reasonOptions(r.data.reasons, (r.data.reasons.find(function (x) { return x.isDefault; }) || {}).code);
+            // Lý do mặc định của chuyển kho (XCKho)
+            reasonOptions(r.data.reasons, (r.data.reasons.find(function (x) { return x.isDefault; }) || r.data.reasons.find(function (x) { return x.code === 'XCKho'; }) || {}).code);
             applyMode();
             prefillFromPo($to);
             return;

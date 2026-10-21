@@ -1,7 +1,7 @@
 <?php
 /**
- * Màn "Phiếu chuyển kho": thanh công cụ (Thêm · Sửa · Xóa · Duyệt · Nạp), dải lọc (Trạng thái · Từ · Đến · Chi nhánh ·
- * Tìm nhanh), lưới phiếu. Phiếu đang chờ xác nhận nền vàng, đã xác nhận nền xám. Bấm đúp một dòng để mở phiếu.
+ * Màn "Phiếu chuyển kho": nút Tạo phiếu chuyển kho, dải lọc (Trạng thái · Từ · Đến · Chi nhánh · Tìm nhanh), lưới phiếu.
+ * Phiếu đang chờ xác nhận nền vàng, đã xác nhận nền xám. Bấm vào một dòng để mở phiếu (duyệt nhận / xoá làm trong phiếu).
  *
  * @package tgs-transfer-management
  */
@@ -25,13 +25,9 @@ $gt_today = current_time('Y-m-d');
     </style>
     <div class="card">
         <div class="card-body pb-2">
-            <div class="d-flex align-items-center gap-1 flex-wrap gt-toolbar mb-2">
-                <h5 class="mb-0 me-3"><i class="bx bx-transfer-alt me-1"></i>Phiếu chuyển kho</h5>
-                <a class="btn btn-sm btn-outline-success" href="<?php echo esc_url(tgs_url('transfer-export-add')); ?>"><i class="bx bx-plus me-1"></i>Thêm</a>
-                <button type="button" class="btn btn-sm btn-outline-primary gt-edit"><i class="bx bx-edit me-1"></i>Sửa</button>
-                <button type="button" class="btn btn-sm btn-outline-danger gt-del"><i class="bx bx-x me-1"></i>Xóa</button>
-                <button type="button" class="btn btn-sm btn-outline-dark gt-approve"><i class="bx bx-check-double me-1"></i>Duyệt</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary gt-reload"><i class="bx bx-refresh me-1"></i>Nạp</button>
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                <h5 class="mb-0 me-auto"><i class="bx bx-transfer-alt me-1"></i>Phiếu chuyển kho</h5>
+                <a class="btn btn-sm btn-primary" href="<?php echo esc_url(tgs_url('transfer-export-add')); ?>"><i class="bx bx-plus me-1"></i>Tạo phiếu chuyển kho</a>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-1 gt-filter">
                 <label>Trạng thái</label>
@@ -64,16 +60,14 @@ $gt_today = current_time('Y-m-d');
 </div>
 <script>
 (function ($) {
-    var $l = $('.gt-list'), nonce = $l.data('nonce'), me = +$l.data('blog'), rows = [], sel = null;
+    var $l = $('.gt-list'), nonce = $l.data('nonce'), me = +$l.data('blog'), rows = [];
     var formUrl = '<?php echo esc_url_raw(tgs_url('transfer-export-add')); ?>';
     var esc = function (s) { return $('<div>').text(s == null ? '' : s).html(); };
     var d = function (s) { return s && s.length >= 10 ? s.substr(8, 2) + '/' + s.substr(5, 2) + '/' + s.substr(0, 4) : ''; };
     var dt = function (s) { return s && s.length >= 16 ? d(s) + ' ' + s.substr(11, 5) : d(s); };
     function ajax(action, data) { return $.post(ajaxurl, $.extend({ action: 'tgs_gt_' + action, nonce: nonce }, data || {})); }
-    function current() { return rows.find(function (r) { return r.transfer_id === sel; }); }
     function open(id) { window.location.href = formUrl + '&id=' + id; }
     function load() {
-        sel = null;
         ajax('htlist', { status: $l.find('.gt-f-status').val(), from: $l.find('.gt-f-from').val(), to: $l.find('.gt-f-to').val(), blog_id: $l.find('.gt-f-blog').val(), search: $l.find('.gt-f-search').val() }).done(function (r) {
             var $b = $l.find('.gt-rows').empty();
             if (!r.success) return $b.append('<tr><td colspan="12" class="text-danger">' + esc(r.data && r.data.message) + '</td></tr>');
@@ -92,22 +86,7 @@ $gt_today = current_time('Y-m-d');
             $l.find('.gt-total').text(rows.length + ' phiếu');
         });
     }
-    $l.on('click', '.gt-rows tr[data-id]', function () { sel = +$(this).data('id'); $l.find('.gt-rows tr').removeClass('gt-sel'); $(this).addClass('gt-sel'); })
-      .on('dblclick', '.gt-rows tr[data-id]', function () { open(+$(this).data('id')); });
-    $l.find('.gt-edit').on('click', function () { if (!sel) return alert('Chọn một phiếu'); open(sel); });
-    $l.find('.gt-del').on('click', function () {
-        var t = current(); if (!t) return alert('Chọn một phiếu');
-        if (!confirm('Xóa phiếu ' + t.code + '? Tồn hai bên tự trả lại.')) return;
-        ajax('action', { transfer_id: t.transfer_id, do: 'delete' }).done(function (r) { if (!r.success) alert(r.data && r.data.message); load(); });
-    });
-    $l.find('.gt-approve').on('click', function () {
-        var t = current(); if (!t) return alert('Chọn một phiếu');
-        if (t.approved) return alert('Phiếu đã xác nhận');
-        if (!t.exported) return alert('Phiếu chưa xuất (nháp) — mở phiếu để Ghi');
-        if (!confirm('Xác nhận đã nhận đủ hàng phiếu ' + t.code + '? Tồn bên nhận cộng ngay.')) return;
-        ajax('action', { transfer_id: t.transfer_id, do: 'approve_import' }).done(function (r) { if (!r.success) alert(r.data && r.data.message); load(); });
-    });
-    $l.find('.gt-reload').on('click', load);
+    $l.on('click', '.gt-rows tr[data-id]', function () { open(+$(this).data('id')); });
     $l.find('.gt-f-status,.gt-f-from,.gt-f-to,.gt-f-blog').on('change', load);
     $l.find('.gt-f-search').on('keydown', function (e) { if (e.key === 'Enter') load(); });
     ajax('options', {}).done(function (r) {
