@@ -9,7 +9,10 @@
  *   tgs_gt_action     approve_export · unapprove_export · approve_import · unapprove_import · reject · delete
  *   tgs_gt_htlist     màn "Phiếu chuyển kho": trạng thái (chờ xác nhận / đã xác nhận / tất cả), từ – đến, chi nhánh, tìm nhanh
  *   tgs_gt_report     "Báo cáo chuyển kho nội bộ": chi tiết (mode=detail) / nhóm theo mặt hàng (mode=item)
- * Quyền: đăng nhập + thành viên website; bên ĐI sửa / xoá / duyệt xuất, bên ĐẾN duyệt nhận / từ chối (super admin làm được cả hai).
+ * Quyền: bên ĐI sửa / xoá / duyệt xuất, bên ĐẾN duyệt nhận / từ chối. Quản trị của website đang đứng (kế toán chi nhánh) và
+ * quản trị mạng lập / thao tác được phiếu cho MỌI chi nhánh — không phải vào từng website.
+ * Lý do chuyển kho: danh mục lý do của phần mềm kế toán (/api/v1/posting/reasons, nhớ 6 giờ), không gọi được thì dùng danh
+ * mục lý do xuất có sẵn.
  */
 if (!defined('ABSPATH')) {
     exit;
@@ -50,15 +53,75 @@ class TGS_GT_Ajax
         return isset($_POST[$k]) ? wp_unslash($_POST[$k]) : $default;
     }
 
+    /** Được thao tác phiếu của chi nhánh khác (không phải đầu đi / đầu đến là website đang đứng). */
+    private static function can_all()
+    {
+        return is_super_admin() || current_user_can('manage_options');
+    }
+
+    const REASON_CACHE = 'tgs_gt_erp_reasons';
+
+    /**
+     * Lý do chuyển kho: [{code, name, isDefault}] — lý do xuất (kind out) của phần mềm kế toán, lý do mặc định của chuyển
+     * kho (flags.default = transfer) đứng đầu. $refresh: kéo lại, bỏ bản nhớ.
+     */
+    public static function reasons($refresh = false)
+    {
+        $list = $refresh ? false : get_site_transient(self::REASON_CACHE);
+        if (is_array($list) && $list) {
+            return $list;
+        }
+        $list = [];
+        if (class_exists('TGS_Acc_Api_Client') && class_exists('TGS_Acc_Config') && TGS_Acc_Config::url() !== '' && TGS_Acc_Config::key() !== '') {
+            $res = (new TGS_Acc_Api_Client())->get('/api/v1/posting/reasons');
+            if (!is_wp_error($res)) {
+                foreach ((array) ($res['data'] ?? []) as $r) {
+                    $r = (array) $r;
+                    if (($r['kind'] ?? '') !== 'out' || empty($r['isActive'])) {
+                        continue;
+                    }
+                    $flags = (array) ($r['flags'] ?? []);
+                    $list[] = ['code' => (string) $r['code'], 'name' => (string) $r['name'], 'isDefault' => ($flags['default'] ?? '') === 'transfer'];
+                }
+            }
+        }
+        if (!$list) {
+            $f = defined('TGS_SHOP_PLUGIN_DIR') ? TGS_SHOP_PLUGIN_DIR . 'admin-views/pages/ticket/create/configs/ticket_import_reasons.php' : '';
+            if ($f && file_exists($f)) {
+                require_once $f;
+            }
+            if (function_exists('tgs_ticket_get_export_reasons')) {
+                foreach (tgs_ticket_get_export_reasons() as $r) {
+                    $list[] = ['code' => (string) $r['code'], 'name' => trim(($r['account'] ? $r['account'] . '-' : '') . $r['label']), 'isDefault' => $r['code'] === 'XCKho'];
+                }
+            }
+            if ($list) {
+                set_site_transient(self::REASON_CACHE, $list, 10 * MINUTE_IN_SECONDS);
+            }
+            return self::sort_reasons($list);
+        }
+        $list = self::sort_reasons($list);
+        set_site_transient(self::REASON_CACHE, $list, 6 * HOUR_IN_SECONDS);
+        return $list;
+    }
+
+    private static function sort_reasons(array $list)
+    {
+        usort($list, static function ($a, $b) { return ($b['isDefault'] <=> $a['isDefault']) ?: strcmp($a['code'], $b['code']); });
+        return $list;
+    }
+
     public static function options()
     {
         self::guard();
         $blog = (int) self::post('blog_id', get_current_blog_id());
         wp_send_json_success([
             'currentBlogId' => get_current_blog_id(),
+            'canAll' => self::can_all(),
             'sites' => TGS_Global_Transfer::sites(),
             'zones' => TGS_Global_Transfer::zones_of_blog($blog),
             'branchCode' => TGS_Global_Transfer::branch_of_blog($blog),
+            'reasons' => self::reasons(!empty($_POST['refresh_reasons'])),
         ]);
     }
 
@@ -87,8 +150,16 @@ class TGS_GT_Ajax
         self::guard();
         $id = (int) self::post('transfer_id', 0);
         $items = json_decode((string) self::post('items', '[]'), true);
+        $from = (int) self::post('from_blog_id', 0) ?: get_current_blog_id();
+        if ($from !== get_current_blog_id() && !self::can_all()) {
+            wp_send_json_error(['message' => 'Chỉ quản trị mới lập phiếu cho chi nhánh xuất khác website đang đứng']);
+        }
+        if (!get_site($from)) {
+            wp_send_json_error(['message' => 'Chi nhánh xuất không tồn tại']);
+        }
         $data = [
-            'from_blog_id' => get_current_blog_id(),
+            'from_blog_id' => $from,
+            'reason_code' => sanitize_text_field(self::post('reason_code')),
             'to_blog_id' => (int) self::post('to_blog_id'),
             'from_zone' => sanitize_text_field(self::post('from_zone')),
             'to_zone' => sanitize_text_field(self::post('to_zone')),
@@ -102,10 +173,9 @@ class TGS_GT_Ajax
             if (!$cur) {
                 wp_send_json_error(['message' => 'Không thấy phiếu']);
             }
-            if ((int) $cur['from_blog_id'] !== get_current_blog_id() && !is_super_admin()) {
+            if ((int) $cur['from_blog_id'] !== get_current_blog_id() && !self::can_all()) {
                 wp_send_json_error(['message' => 'Chỉ bên xuất được sửa phiếu']);
             }
-            $data['from_blog_id'] = (int) $cur['from_blog_id'];
             $res = TGS_Global_Transfer::update($id, $data, is_array($items) ? $items : []);
             if (!is_wp_error($res) && $approve && (int) $res['export_status'] === 0) {
                 $res = TGS_Global_Transfer::approve_export($id);
@@ -179,8 +249,8 @@ class TGS_GT_Ajax
             wp_send_json_error(['message' => 'Không thấy phiếu']);
         }
         $blog = get_current_blog_id();
-        $is_from = (int) $t['from_blog_id'] === $blog || is_super_admin();
-        $is_to = (int) $t['to_blog_id'] === $blog || is_super_admin();
+        $is_from = (int) $t['from_blog_id'] === $blog || self::can_all();
+        $is_to = (int) $t['to_blog_id'] === $blog || self::can_all();
         $need = in_array($do, ['approve_import', 'unapprove_import', 'reject'], true) ? $is_to : $is_from;
         if (!$need) {
             wp_send_json_error(['message' => in_array($do, ['approve_import', 'unapprove_import', 'reject'], true) ? 'Chỉ bên nhận được thao tác này' : 'Chỉ bên xuất được thao tác này']);

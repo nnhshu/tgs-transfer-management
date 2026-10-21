@@ -24,10 +24,10 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     <div class="card mb-3">
         <div class="card-body d-flex align-items-center gap-2 flex-wrap py-2">
             <h5 class="mb-0 me-auto"><i class="bx bx-transfer-alt me-1"></i>Nhập- xuất kho nội bộ</h5>
-            <button type="button" class="btn btn-sm btn-primary gt-save d-none"><i class="bx bx-save me-1"></i>Ghi</button>
-            <button type="button" class="btn btn-sm btn-success gt-confirm d-none"><i class="bx bx-check-double me-1"></i>Xác nhận đã nhận đủ hàng</button>
-            <button type="button" class="btn btn-sm btn-outline-warning gt-unconfirm d-none"><i class="bx bx-undo me-1"></i>Bỏ xác nhận</button>
-            <button type="button" class="btn btn-sm btn-outline-danger gt-delete d-none"><i class="bx bx-x me-1"></i>Xóa</button>
+            <button type="button" class="btn btn-sm btn-primary gt-save" style="display:none"><i class="bx bx-save me-1"></i>Ghi</button>
+            <button type="button" class="btn btn-sm btn-success gt-confirm" style="display:none"><i class="bx bx-check-double me-1"></i>Xác nhận đã nhận đủ hàng</button>
+            <button type="button" class="btn btn-sm btn-outline-warning gt-unconfirm" style="display:none"><i class="bx bx-undo me-1"></i>Bỏ xác nhận</button>
+            <button type="button" class="btn btn-sm btn-outline-danger gt-delete" style="display:none"><i class="bx bx-x me-1"></i>Xóa</button>
             <a class="btn btn-sm btn-outline-secondary" href="<?php echo esc_url(tgs_url('ticket-transfer-exports')); ?>"><i class="bx bx-exit me-1"></i>Đóng</a>
         </div>
     </div>
@@ -40,11 +40,12 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
                 <div class="col-md-3"><label class="form-label">Ngày</label><input type="date" class="form-control form-control-sm gt-date" value="<?php echo esc_attr(current_time('Y-m-d')); ?>"></div>
                 <div class="col-md-3"><label class="form-label">Trạng thái</label><input class="form-control form-control-sm gt-status" disabled value="Mới"></div>
                 <div class="col-md-3"><label class="form-label">Chứng từ gốc</label><input class="form-control form-control-sm gt-src" disabled></div>
-                <div class="col-md-3"><label class="form-label">Chi nhánh xuất</label><input class="form-control form-control-sm gt-from-site" disabled></div>
+                <div class="col-md-3"><label class="form-label">Chi nhánh xuất</label><select class="form-select form-select-sm gt-from-site"></select></div>
                 <div class="col-md-3"><label class="form-label">Kho xuất</label><select class="form-select form-select-sm gt-from-zone"></select></div>
                 <div class="col-md-3"><label class="form-label">Chi nhánh nhập</label><select class="form-select form-select-sm gt-to-site"><option value="">— Chọn —</option></select></div>
                 <div class="col-md-3"><label class="form-label">Kho nhập</label><select class="form-select form-select-sm gt-to-zone"></select></div>
-                <div class="col-12"><label class="form-label">Diễn giải</label><textarea class="form-control form-control-sm gt-note" rows="2"></textarea></div>
+                <div class="col-md-3"><label class="form-label">Lý do <a href="#" class="gt-reason-refresh small ms-1" title="Kéo lại danh mục lý do từ phần mềm kế toán"><i class="bx bx-refresh"></i></a></label><select class="form-select form-select-sm gt-reason"></select></div>
+                <div class="col-md-9"><label class="form-label">Diễn giải</label><textarea class="form-control form-control-sm gt-note" rows="1"></textarea></div>
             </div>
         </fieldset>
     </div></div>
@@ -67,7 +68,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
 </div>
 <script>
 (function ($) {
-    var $w = $('.gt-wrap'), id = +$w.data('id'), nonce = $w.data('nonce'), cur = +$w.data('blog'), sa = +$w.data('sa') === 1;
+    var $w = $('.gt-wrap'), id = +$w.data('id'), nonce = $w.data('nonce'), cur = +$w.data('blog'), sa = +$w.data('sa') === 1, canAll = sa, sites = [];
     var lines = [], loaded = null, mode = 'new'; // new | edit (bên xuất sửa được) | receive (bên nhập chờ xác nhận) | view
     var listUrl = '<?php echo esc_url_raw(tgs_url('ticket-transfer-exports')); ?>', formUrl = '<?php echo esc_url_raw(tgs_url('transfer-export-add')); ?>';
     var fmt = function (n) { return (+n || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 }); };
@@ -100,10 +101,11 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     function applyMode() {
         $w.find('.gt-hd').toggleClass('gt-ro', !editable());
         $w.find('.gt-add').toggle(editable());
-        $w.find('.gt-save').toggleClass('d-none', !editable());
-        $w.find('.gt-confirm').toggleClass('d-none', mode !== 'receive');
-        $w.find('.gt-unconfirm').toggleClass('d-none', !(loaded && +loaded.import_status === 1 && (sa || +loaded.to_blog_id === cur)));
-        $w.find('.gt-delete').toggleClass('d-none', !(loaded && mode === 'edit'));
+        $w.find('.gt-save').toggle(editable());
+        $w.find('.gt-confirm').toggle(mode === 'receive');
+        $w.find('.gt-unconfirm').toggle(!!(loaded && +loaded.import_status === 1 && (canAll || +loaded.to_blog_id === cur)));
+        $w.find('.gt-delete').toggle(!!(loaded && mode === 'edit'));
+        $w.find('.gt-from-site').prop('disabled', !(editable() && canAll && !loaded));
         render();
     }
     $w.on('input', '.gt-q,.gt-n,.gt-r', function () {
@@ -138,10 +140,11 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
 
     $w.find('.gt-save').on('click', function () {
         if (!$w.find('.gt-to-site').val()) return msg('warning', 'Chưa chọn chi nhánh nhập');
+        if ($w.find('.gt-to-site').val() === $w.find('.gt-from-site').val()) return msg('warning', 'Chi nhánh nhập trùng chi nhánh xuất');
         if (!lines.length) return msg('warning', 'Phiếu chưa có hàng');
         $w.find('.gt-save').prop('disabled', true);
         ajax('save', {
-            transfer_id: id || 0, to_blog_id: $w.find('.gt-to-site').val(), from_zone: $w.find('.gt-from-zone').val(), to_zone: $w.find('.gt-to-zone').val(),
+            transfer_id: id || 0, from_blog_id: $w.find('.gt-from-site').val(), reason_code: $w.find('.gt-reason').val() || '', to_blog_id: $w.find('.gt-to-site').val(), from_zone: $w.find('.gt-from-zone').val(), to_zone: $w.find('.gt-to-zone').val(),
             doc_date: $w.find('.gt-date').val(), transfer_type: loaded ? loaded.transfer_type : 1, note: $w.find('.gt-note').val(), approve: 1,
             items: JSON.stringify(lines.map(function (l) { return { product_id: l.product_id, sku: l.sku, product_name: l.product_name, unit_name: l.unit_name, quantity: l.quantity, price: l.price, tax_percent: l.tax_percent, note: l.note }; }))
         }).done(function (r) {
@@ -194,15 +197,43 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         });
     }
 
+    function reasonOptions(list, value) {
+        var $r = $w.find('.gt-reason').empty();
+        if (!list.length) $r.append('<option value="">(chưa có danh mục lý do)</option>');
+        list.forEach(function (x) { $r.append($('<option>').val(x.code).text(x.code + ' — ' + x.name)); });
+        if (value) { if (!$r.find('option').filter(function () { return this.value === value; }).length) $r.append($('<option>').val(value).text(value)); $r.val(value); }
+    }
+    $w.find('.gt-reason-refresh').on('click', function (e) {
+        e.preventDefault();
+        var keep = $w.find('.gt-reason').val();
+        ajax('options', { blog_id: cur, refresh_reasons: 1 }).done(function (r) { if (r.success) { reasonOptions(r.data.reasons, keep); msg('success', 'Đã kéo lại danh mục lý do (' + r.data.reasons.length + ').'); } });
+    });
+    var name = function (b) { var s = sites.find(function (x) { return x.blogId === b; }); return s ? s.name + (s.branchCode ? ' — ' + s.branchCode : '') : (b > 0 ? 'blog ' + b : 'Ngoài hệ thống'); };
+    function fillSites($sel, value, skip) {
+        $sel.empty();
+        if ($sel.hasClass('gt-to-site')) $sel.append('<option value="">— Chọn —</option>');
+        sites.forEach(function (s) { if (s.blogId !== skip) $sel.append($('<option>').val(s.blogId).text(name(s.blogId))); });
+        if (value !== undefined && value !== null && value !== '') {
+            if (!$sel.find('option[value="' + value + '"]').length) $sel.append($('<option>').val(value).text(name(+value)));
+            $sel.val(String(value));
+        }
+    }
+    $w.find('.gt-from-site').on('change', function () {
+        var b = +this.value, keepTo = $w.find('.gt-to-site').val();
+        loadZones(b, $w.find('.gt-from-zone'), '').always(render);
+        fillSites($w.find('.gt-to-site'), +keepTo === b ? '' : keepTo, b);
+        if (+keepTo === b) zoneOptions($w.find('.gt-to-zone'), [], '');
+    });
+
     ajax('options', { blog_id: cur }).done(function (r) {
         if (!r.success) return msg('danger', r.data && r.data.message || 'Không tải được danh mục');
-        var sites = r.data.sites, $to = $w.find('.gt-to-site');
-        var name = function (b) { var s = sites.find(function (x) { return x.blogId === b; }); return s ? s.name + (s.branchCode ? ' — ' + s.branchCode : '') : (b > 0 ? 'blog ' + b : 'Ngoài hệ thống'); };
-        sites.forEach(function (s) { $to.append($('<option>').val(s.blogId).text(name(s.blogId))); });
+        sites = r.data.sites; canAll = !!r.data.canAll;
+        var $to = $w.find('.gt-to-site');
         if (!id) {
-            $w.find('.gt-from-site').val(name(cur));
-            $to.find('option[value="' + cur + '"]').remove();
+            fillSites($w.find('.gt-from-site'), cur);
+            fillSites($to, '', cur);
             zoneOptions($w.find('.gt-from-zone'), r.data.zones, '');
+            reasonOptions(r.data.reasons, (r.data.reasons.find(function (x) { return x.isDefault; }) || {}).code);
             applyMode();
             prefillFromPo($to);
             return;
@@ -213,14 +244,14 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             var t = loaded, confirmed = +t.import_status === 1 || (+t.to_blog_id <= 0 && +t.export_status === 1);
             $w.find('.gt-code').val(t.transfer_code); $w.find('.gt-date').val(t.doc_date); $w.find('.gt-note').val(t.note || ''); $w.find('.gt-src').val(t.source_label || '');
             $w.find('.gt-status').val(+t.import_status === 2 ? 'Từ chối nhận' : (confirmed ? 'Đã xác nhận' : (+t.export_status === 1 ? 'Đang chờ xác nhận' : 'Nháp (chưa xuất)')));
-            $w.find('.gt-from-site').val(t.from_blog_name || name(+t.from_blog_id));
-            if (!$to.find('option[value="' + t.to_blog_id + '"]').length) $to.append($('<option>').val(t.to_blog_id).text(t.to_blog_name || name(+t.to_blog_id)));
-            $to.val(String(t.to_blog_id));
+            fillSites($w.find('.gt-from-site'), t.from_blog_id);
+            fillSites($to, t.to_blog_id, +t.from_blog_id);
+            reasonOptions(r.data.reasons, t.reason_code || '');
             lines = t.items.map(function (it) { return { item_id: +it.item_id, product_id: it.product_id, sku: it.sku, product_name: it.product_name, unit_name: it.unit_name, quantity: +it.quantity, received: it.received_qty == null ? '' : +it.received_qty, price: +it.price, tax_percent: +it.tax_percent, note: it.note }; });
-            // Đang đứng ở chi nhánh nhập → nhận hàng; ở chi nhánh xuất (hoặc quản trị mạng) → sửa; đã xác nhận / từ chối → chỉ xem.
+            // Đang đứng ở chi nhánh nhập → nhận hàng; ở chi nhánh xuất (hoặc quản trị) → sửa; đã xác nhận / từ chối → chỉ xem.
             if (confirmed || +t.import_status === 2) mode = 'view';
             else if (+t.to_blog_id === cur && +t.export_status === 1) mode = 'receive';
-            else if (+t.from_blog_id === cur || sa) mode = 'edit';
+            else if (+t.from_blog_id === cur || canAll) mode = 'edit';
             else mode = 'view';
             $.when(loadZones(+t.from_blog_id, $w.find('.gt-from-zone'), t.from_zone), +t.to_blog_id > 0 ? loadZones(+t.to_blog_id, $w.find('.gt-to-zone'), t.to_zone) : zoneOptions($w.find('.gt-to-zone'), [], t.to_zone)).always(applyMode);
             if (/[?&]saved=1/.test(location.search)) msg('success', 'Đã ghi phiếu.');
