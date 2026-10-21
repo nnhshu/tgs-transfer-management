@@ -1,11 +1,14 @@
 <?php
 /**
- * Phiếu chuyển kho — "Nhập- xuất kho nội bộ" (?id= để mở phiếu đã có). Bố cục như form phiếu của phần mềm cũ:
- *   thanh công cụ trên cùng · đầu phiếu gọn hai bên · lưới "Chi tiết phiếu" nhập thẳng trên ô (luôn có một dòng trống cuối:
- *   gõ mã hàng → gợi ý → Enter chọn, nhảy sang Số lượng → Enter xuống dòng mới; dán nhiều dòng "mã hàng<Tab>số lượng" từ
- *   Excel) · dòng tổng.
- *   Bên XUẤT: Ghi = lưu và xuất kho luôn (tồn bên xuất trừ). Bên NHẬP: ghi Số lượng nhập → Xác nhận đã nhận đủ hàng.
- *   Phiếu đã xác nhận chỉ xem; muốn sửa phải bỏ xác nhận trước. Chỉ cộng / trừ số lượng.
+ * Phiếu chuyển kho — "Nhập-Xuất kho nội bộ" (?id= để mở phiếu đã có). Bố cục theo form phiếu chuyển kho của phần mềm cũ:
+ *   thanh công cụ (Thêm · Ghi · Ghi và Đóng · Nạp · In · Xóa · Đóng);
+ *   khối trái 2 cột: Chi nhánh xuất | Chi nhánh nhập · Kho xuất | Kho nhập · Diễn giải;
+ *   khối giữa: Số phiếu · Ngày · Trạng thái;
+ *   khối phải "Thủ kho nhập xác nhận": ô tích "Xác nhận đã nhận đủ hàng" (bên nhập tích = duyệt nhận, bỏ tích = bỏ xác nhận);
+ *   hàng dưới: Lý do xuất;
+ *   nhóm "Chi tiết phiếu": ô Mã hàng (gõ mã / tên / mã vạch → Enter thêm dòng; dán nhiều dòng "mã hàng ⇥ số lượng" từ Excel)
+ *   rồi lưới (sửa Số lượng / Số lượng nhập / Ghi chú ngay trên ô) · dòng tổng.
+ * Ghi = lưu và xuất kho luôn (tồn bên xuất trừ). Phiếu đã xác nhận chỉ xem. Chỉ cộng / trừ số lượng.
  *
  * @package tgs-transfer-management
  */
@@ -15,80 +18,102 @@ if (!defined('ABSPATH')) {
 $gt_id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
 ?>
-<div class="container-fluid flex-grow-1 container-p-y gt-wrap" data-id="<?php echo (int) $gt_id; ?>" data-nonce="<?php echo esc_attr($gt_nonce); ?>" data-blog="<?php echo (int) get_current_blog_id(); ?>" data-sa="<?php echo is_super_admin() ? 1 : 0; ?>">
+<div class="container-fluid flex-grow-1 py-2 gt-wrap" data-id="<?php echo (int) $gt_id; ?>" data-nonce="<?php echo esc_attr($gt_nonce); ?>" data-blog="<?php echo (int) get_current_blog_id(); ?>" data-sa="<?php echo is_super_admin() ? 1 : 0; ?>">
     <style>
-        .gt-wrap .gt-tb { background: #f1f3f6; border: 1px solid #d5dae1; border-radius: 6px; padding: .3rem .5rem; }
-        .gt-wrap .gt-tb .btn { padding: .2rem .6rem; font-size: .85rem; }
-        .gt-wrap .gt-hd { background: #fff; border: 1px solid #d5dae1; border-radius: 6px; padding: .6rem .8rem; }
+        .gt-wrap { font-size: 12.5px; }
         .gt-wrap .gt-hide { display: none !important; }
-        .gt-wrap .gt-hd .gt-f { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
-        .gt-wrap .gt-hd .gt-f > .form-control, .gt-wrap .gt-hd .gt-f > .form-select { flex: 1 1 auto; min-width: 0; }
-        .gt-wrap .gt-hd label { width: 115px; flex: 0 0 115px; margin: 0; font-size: .85rem; font-weight: 600; color: #344; }
-        .gt-wrap .gt-hd label.gt-l2 { width: auto; flex: 0 0 auto; margin-left: .5rem; }
-        .gt-wrap .gt-hd .form-control, .gt-wrap .gt-hd .form-select { font-size: .85rem; }
-        .gt-wrap .gt-ro .form-control, .gt-wrap .gt-ro .form-select { pointer-events: none; background: #f3f4f6; }
-        .gt-wrap .gt-grid { border: 1px solid #b8c4d6; border-radius: 6px; overflow: auto; max-height: 60vh; background: #fff; }
-        .gt-wrap .gt-grid table { margin: 0; border-collapse: collapse; width: 100%; font-size: .85rem; }
-        .gt-wrap .gt-grid th { background: #dfe8f5; position: sticky; top: 0; z-index: 2; padding: .3rem .4rem; border: 1px solid #c3cfe0; white-space: nowrap; font-weight: 600; }
-        .gt-wrap .gt-grid td { border: 1px solid #e1e6ee; padding: 0; height: 30px; white-space: nowrap; }
-        .gt-wrap .gt-grid td.gt-txt { padding: 0 .4rem; }
-        .gt-wrap .gt-grid td input { width: 100%; height: 30px; border: 0; padding: 0 .4rem; background: transparent; outline: none; font-size: .85rem; }
-        .gt-wrap .gt-grid td input:focus { background: #fffbe0; box-shadow: inset 0 0 0 2px #4a90e2; }
-        .gt-wrap .gt-grid td input.text-end { text-align: right; }
-        .gt-wrap .gt-grid tr.gt-new td { background: #fbfcfe; }
-        .gt-wrap .gt-grid tr:hover td { background: #f3f8ff; }
-        .gt-wrap .gt-grid tfoot td { background: #fff7c2; font-weight: 600; padding: .3rem .4rem; position: sticky; bottom: 0; }
-        .gt-wrap .gt-grid .gt-x { border: 0; background: none; color: #c0392b; padding: 0 .5rem; height: 30px; }
-        .gt-wrap .gt-sugg { position: absolute; z-index: 50; background: #fff; border: 1px solid #9fb3cf; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-height: 280px; overflow: auto; min-width: 520px; font-size: .85rem; }
-        .gt-wrap .gt-sugg div { padding: .25rem .5rem; cursor: pointer; white-space: nowrap; }
+        .gt-wrap .gt-tb { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; background: linear-gradient(#f7f9fc, #e7edf5); border: 1px solid #c6d1e0; border-radius: 4px; padding: 2px 4px; margin-bottom: 6px; }
+        .gt-wrap .gt-tb .gt-title { font-weight: 700; margin-right: 10px; }
+        .gt-wrap .gt-tb button, .gt-wrap .gt-tb a { display: inline-flex; align-items: center; gap: 3px; border: 1px solid transparent; background: none; padding: 2px 8px; border-radius: 3px; font-size: 12.5px; color: #1d2b3a; text-decoration: none; line-height: 20px; }
+        .gt-wrap .gt-tb button:hover, .gt-wrap .gt-tb a:hover { border-color: #9db4d4; background: #fff; }
+        .gt-wrap .gt-tb i { font-size: 15px; }
+        .gt-wrap .gt-tb .sep { width: 1px; height: 18px; background: #c6d1e0; margin: 0 4px; }
+        .gt-wrap fieldset { border: 1px solid #c6d1e0; border-radius: 4px; padding: 2px 8px 6px; margin: 0; background: #fff; }
+        .gt-wrap legend { float: none; width: auto; font-size: 12px; font-weight: 600; color: #2a4d7f; padding: 0 4px; margin: 0; }
+        .gt-wrap .gt-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+        .gt-wrap .gt-row label { flex: 0 0 92px; margin: 0; color: #223; }
+        .gt-wrap .gt-row label.w2 { flex-basis: 96px; padding-left: 8px; }
+        .gt-wrap .gt-row .ctl { flex: 1 1 0; min-width: 0; }
+        .gt-wrap input.form-control, .gt-wrap select.form-select, .gt-wrap textarea.form-control { font-size: 12.5px; height: 25px; min-height: 25px; padding: 1px 6px; border-radius: 3px; border-color: #b9c4d3; }
+        .gt-wrap select.form-select { padding-right: 22px; background-position: right 5px center; }
+        .gt-wrap textarea.form-control { height: 44px; }
+        .gt-wrap .gt-ro .form-control, .gt-wrap .gt-ro .form-select { pointer-events: none; background-color: #f1f3f6; }
+        .gt-wrap .gt-status { font-weight: 700; color: #b02a37; min-height: 25px; display: flex; align-items: center; }
+        .gt-wrap .gt-status.ok { color: #1e7e34; }
+        .gt-wrap .gt-detail { border: 1px solid #c6d1e0; border-radius: 4px; background: #fff; margin-top: 6px; }
+        .gt-wrap .gt-detail-hd { display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: #eef3fa; border-bottom: 1px solid #c6d1e0; position: relative; }
+        .gt-wrap .gt-detail-hd b { color: #2a4d7f; }
+        .gt-wrap .gt-grid { overflow: auto; max-height: 58vh; }
+        .gt-wrap .gt-grid table { width: 100%; border-collapse: collapse; }
+        .gt-wrap .gt-grid th { background: #dfe8f5; position: sticky; top: 0; z-index: 2; padding: 3px 5px; border: 1px solid #c3cfe0; white-space: nowrap; font-weight: 600; }
+        .gt-wrap .gt-grid td { border: 1px solid #e1e6ee; padding: 0 5px; height: 24px; white-space: nowrap; }
+        .gt-wrap .gt-grid td.ed { padding: 0; }
+        .gt-wrap .gt-grid td input { width: 100%; height: 23px; border: 0; padding: 0 5px; background: transparent; outline: none; font-size: 12.5px; }
+        .gt-wrap .gt-grid td input:focus { background: #fffbe0; box-shadow: inset 0 0 0 1px #4a90e2; }
+        .gt-wrap .gt-grid tbody tr:hover td { background: #f3f8ff; }
+        .gt-wrap .gt-grid tfoot td { background: #fff7c2; font-weight: 700; position: sticky; bottom: 0; }
+        .gt-wrap .gt-grid .gt-x { border: 0; background: none; color: #c0392b; padding: 0 4px; }
+        .gt-wrap .gt-sugg { position: absolute; z-index: 50; background: #fff; border: 1px solid #9fb3cf; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-height: 280px; overflow: auto; min-width: 560px; }
+        .gt-wrap .gt-sugg div { padding: 3px 6px; cursor: pointer; white-space: nowrap; }
         .gt-wrap .gt-sugg div.on, .gt-wrap .gt-sugg div:hover { background: #2f6fd6; color: #fff; }
-        .gt-wrap .gt-sugg small { opacity: .75; margin-left: .5rem; }
+        .gt-wrap .gt-sugg small { opacity: .75; margin-left: 6px; }
+        .gt-wrap .gt-msg { padding: 3px 8px; margin-bottom: 6px; font-size: 12.5px; }
+        @media print { .gt-wrap .gt-tb, .gt-wrap .gt-add, .gt-wrap .gt-help, .gt-wrap .gt-x { display: none !important; } }
     </style>
 
-    <div class="d-flex align-items-center gap-1 flex-wrap gt-tb mb-2">
-        <strong class="me-3"><i class="bx bx-transfer-alt me-1"></i>Nhập- xuất kho nội bộ</strong>
-        <a class="btn btn-sm btn-outline-success" href="<?php echo esc_url(tgs_url('transfer-export-add')); ?>"><i class="bx bx-plus me-1"></i>Thêm</a>
-        <button type="button" class="btn btn-sm btn-primary gt-save gt-hide"><i class="bx bx-save me-1"></i>Ghi</button>
-        <button type="button" class="btn btn-sm btn-outline-danger gt-delete gt-hide"><i class="bx bx-x me-1"></i>Xóa</button>
-        <button type="button" class="btn btn-sm btn-success gt-confirm gt-hide"><i class="bx bx-check-double me-1"></i>Xác nhận đã nhận đủ hàng</button>
-        <button type="button" class="btn btn-sm btn-outline-warning gt-unconfirm gt-hide"><i class="bx bx-undo me-1"></i>Bỏ xác nhận</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary gt-print gt-hide"><i class="bx bx-printer me-1"></i>In</button>
-        <a class="btn btn-sm btn-outline-secondary" href="<?php echo esc_url(tgs_url('ticket-transfer-exports')); ?>"><i class="bx bx-exit me-1"></i>Đóng</a>
+    <div class="gt-tb">
+        <span class="gt-title"><i class="bx bx-transfer-alt"></i> Nhập-Xuất kho nội bộ</span>
+        <a href="<?php echo esc_url(tgs_url('transfer-export-add')); ?>"><i class="bx bx-plus text-success"></i>Thêm</a>
+        <button type="button" class="gt-save gt-hide"><i class="bx bx-save text-primary"></i>Ghi</button>
+        <button type="button" class="gt-save-close gt-hide"><i class="bx bx-save"></i>Ghi và Đóng</button>
+        <button type="button" class="gt-reload"><i class="bx bx-refresh text-success"></i>Nạp</button>
+        <button type="button" class="gt-print gt-hide"><i class="bx bx-printer"></i>In</button>
+        <button type="button" class="gt-delete gt-hide"><i class="bx bx-x text-danger"></i>Xóa</button>
+        <span class="sep"></span>
+        <a href="<?php echo esc_url(tgs_url('ticket-transfer-exports')); ?>"><i class="bx bx-exit text-danger"></i>Đóng</a>
     </div>
-    <div class="alert py-2 gt-msg gt-hide"></div>
+    <div class="alert gt-msg gt-hide"></div>
 
-    <div class="gt-hd mb-2">
-        <div class="row gx-4">
-            <div class="col-lg-6">
-                <div class="gt-f"><label>Lý do</label><select class="form-select form-select-sm gt-reason"></select><a href="#" class="gt-reason-refresh" title="Kéo lại danh mục lý do từ phần mềm kế toán"><i class="bx bx-refresh"></i></a></div>
-                <div class="gt-f"><label>Chi nhánh xuất</label><select class="form-select form-select-sm gt-from-site"></select></div>
-                <div class="gt-f"><label>Kho xuất</label><select class="form-select form-select-sm gt-from-zone"></select></div>
-                <div class="gt-f"><label>Diễn giải</label><input class="form-control form-control-sm gt-note"></div>
-            </div>
-            <div class="col-lg-6">
-                <div class="gt-f"><label>Số phiếu</label><input class="form-control form-control-sm gt-code" disabled placeholder="(tự sinh khi ghi)"><label class="gt-l2">Ngày</label><input type="date" class="form-control form-control-sm gt-date" style="max-width:170px;flex:0 0 170px" value="<?php echo esc_attr(current_time('Y-m-d')); ?>"></div>
-                <div class="gt-f"><label>Chi nhánh nhập</label><select class="form-select form-select-sm gt-to-site"></select></div>
-                <div class="gt-f"><label>Kho nhập</label><select class="form-select form-select-sm gt-to-zone"></select></div>
-                <div class="gt-f"><label>Trạng thái</label><input class="form-control form-control-sm gt-status" disabled value="Mới"><label class="gt-l2">Chứng từ gốc</label><input class="form-control form-control-sm gt-src" disabled style="max-width:170px;flex:0 0 170px"></div>
-            </div>
+    <div class="d-flex gap-2 align-items-stretch flex-wrap gt-hd">
+        <fieldset style="flex:1 1 560px">
+            <legend>Thông tin chuyển kho</legend>
+            <div class="gt-row"><label>Chi nhánh xuất</label><select class="form-select ctl gt-from-site"></select><label class="w2">Chi nhánh nhập</label><select class="form-select ctl gt-to-site"></select></div>
+            <div class="gt-row"><label>Kho xuất</label><select class="form-select ctl gt-from-zone"></select><label class="w2">Kho nhập</label><select class="form-select ctl gt-to-zone"></select></div>
+            <div class="gt-row" style="align-items:flex-start"><label style="padding-top:3px">Diễn giải</label><textarea class="form-control ctl gt-note"></textarea></div>
+        </fieldset>
+        <fieldset style="flex:0 0 250px">
+            <legend>Phiếu</legend>
+            <div class="gt-row"><label style="flex-basis:62px">Số phiếu</label><input class="form-control ctl gt-code fw-bold" disabled placeholder="(tự sinh)"></div>
+            <div class="gt-row"><label style="flex-basis:62px">Ngày</label><input type="date" class="form-control ctl gt-date" value="<?php echo esc_attr(current_time('Y-m-d')); ?>"></div>
+            <div class="gt-row"><label style="flex-basis:62px">Trạng thái</label><span class="ctl gt-status">Mới</span></div>
+            <div class="gt-row"><label style="flex-basis:62px">CT gốc</label><input class="form-control ctl gt-src" disabled></div>
+        </fieldset>
+        <fieldset style="flex:0 0 250px">
+            <legend>Thủ kho nhập xác nhận</legend>
+            <div class="form-check mt-2"><input class="form-check-input gt-approved" type="checkbox" id="gtApproved" disabled><label class="form-check-label fw-semibold" for="gtApproved">Xác nhận đã nhận đủ hàng</label></div>
+            <div class="text-muted mt-1 gt-approved-info" style="font-size:11.5px"></div>
+        </fieldset>
+    </div>
+    <div class="gt-row gt-hd2" style="max-width:560px"><label>Lý do xuất</label><select class="form-select ctl gt-reason"></select><a href="#" class="gt-reason-refresh" title="Kéo lại danh mục lý do từ phần mềm kế toán"><i class="bx bx-refresh"></i></a></div>
+
+    <div class="gt-detail">
+        <div class="gt-detail-hd">
+            <b>Chi tiết phiếu</b>
+            <span class="gt-add d-flex align-items-center gap-1"><span class="fw-semibold ms-2">Mã hàng</span><input class="form-control gt-code-in" style="width:280px" placeholder="Gõ mã / tên / mã vạch — Enter" autocomplete="off"></span>
+            <small class="text-muted ms-auto gt-help">Enter thêm dòng · ↑↓ chọn gợi ý · dán nhiều dòng "mã hàng ⇥ số lượng" từ Excel · Ctrl+Delete xoá dòng · Ctrl+S ghi</small>
+            <div class="gt-sugg gt-hide"></div>
+        </div>
+        <div class="gt-grid">
+            <table data-ds-no-grid data-ds-no-filter data-ds-no-colcfg data-ds-no-export data-ds-no-resize>
+                <thead><tr>
+                    <th style="width:36px">#</th><th style="width:80px">Kho xuất</th><th style="width:80px">Kho nhập</th><th style="width:130px">Mã hàng</th><th>Tên hàng</th>
+                    <th style="width:60px">ĐVT</th><th style="width:70px" class="text-end">Tồn</th><th style="width:90px" class="text-end">Số lượng</th><th style="width:100px" class="text-end">Số lượng nhập</th><th style="width:180px">Ghi chú</th><th style="width:26px"></th>
+                </tr></thead>
+                <tbody class="gt-lines"></tbody>
+                <tfoot><tr><td class="text-center gt-tcount">0</td><td colspan="6" class="text-end">Tổng</td><td class="text-end gt-tqty">0</td><td class="text-end gt-trecv"></td><td colspan="2"></td></tr></tfoot>
+            </table>
         </div>
     </div>
-
-    <div class="d-flex align-items-center mb-1">
-        <strong class="me-auto">Chi tiết phiếu</strong>
-        <small class="text-muted gt-help">Gõ mã hàng / tên / mã vạch ở dòng trống → Enter chọn → Số lượng → Enter xuống dòng. Dán được nhiều dòng "mã hàng ⇥ số lượng" từ Excel.</small>
-    </div>
-    <div class="gt-grid" data-ds-no-grid data-ds-no-filter data-ds-no-colcfg data-ds-no-export data-ds-no-resize>
-        <table data-ds-no-grid data-ds-no-filter data-ds-no-colcfg data-ds-no-export data-ds-no-resize>
-            <thead><tr>
-                <th style="width:42px">#</th><th style="width:150px">Mã hàng</th><th>Tên hàng</th><th style="width:90px">Kho xuất</th><th style="width:90px">Kho nhập</th>
-                <th style="width:70px">ĐVT</th><th style="width:70px" class="text-end">Tồn</th><th style="width:95px" class="text-end">Số lượng</th><th style="width:105px" class="text-end">Số lượng nhập</th><th style="width:200px">Ghi chú</th><th style="width:34px"></th>
-            </tr></thead>
-            <tbody class="gt-lines"></tbody>
-            <tfoot><tr><td class="text-center gt-tcount">0</td><td colspan="6" class="text-end">Tổng</td><td class="text-end gt-tqty">0</td><td class="text-end gt-trecv"></td><td colspan="2"></td></tr></tfoot>
-        </table>
-    </div>
-    <div class="gt-sugg" style="display:none"></div>
 </div>
 <script>
 (function ($) {
@@ -98,7 +123,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     var fmt = function (n) { return (+n || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 }); };
     var esc = function (s) { return $('<div>').text(s == null ? '' : s).html(); };
     function ajax(action, data) { return $.post(ajaxurl, $.extend({ action: 'tgs_gt_' + action, nonce: nonce }, data || {})); }
-    function msg(type, text) { $w.find('.gt-msg').removeClass('alert-success alert-danger alert-warning').addClass('alert-' + type).text(text).removeClass('gt-hide'); }
+    function msg(type, text) { $w.find('.gt-msg').removeClass('alert-success alert-danger alert-warning gt-hide').addClass('alert-' + type).text(text); }
     function editable() { return mode === 'new' || mode === 'edit'; }
     function zoneOptions($sel, zones, value, emptyText) {
         $sel.empty();
@@ -116,27 +141,21 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         $w.find('.gt-tcount').text(lines.length); $w.find('.gt-tqty').text(fmt(tq));
         $w.find('.gt-trecv').text(mode === 'receive' || (loaded && +loaded.import_status === 1) ? fmt(tr) : '');
     }
-    function rowHtml(l, i) {
-        var kx = esc($w.find('.gt-from-zone').val() || ''), kn = esc($w.find('.gt-to-zone').val() || '');
-        var ed = editable(), rq = '';
-        if (mode === 'receive') rq = '<input class="text-end gt-r" inputmode="decimal" value="' + esc(recv(l)) + '">';
-        else if (loaded && +loaded.import_status === 1) rq = '<span class="px-2">' + fmt(recv(l)) + '</span>';
-        return '<tr data-i="' + i + '"><td class="gt-txt text-center text-muted">' + (i + 1) + '</td>'
-            + '<td class="gt-txt font-monospace">' + esc(l.sku) + '</td><td class="gt-txt">' + esc(l.product_name || '') + '</td>'
-            + '<td class="gt-txt">' + kx + '</td><td class="gt-txt">' + kn + '</td><td class="gt-txt">' + esc(l.unit_name || '') + '</td>'
-            + '<td class="gt-txt text-end text-muted">' + (l.stock === undefined ? '' : fmt(l.stock)) + '</td>'
-            + '<td>' + (ed ? '<input class="text-end gt-q" inputmode="decimal" value="' + esc(l.quantity) + '">' : '<span class="px-2 d-block text-end">' + fmt(l.quantity) + '</span>') + '</td>'
-            + '<td class="text-end">' + rq + '</td>'
-            + '<td>' + (ed ? '<input class="gt-n" value="' + esc(l.note || '') + '">' : '<span class="px-2">' + esc(l.note || '') + '</span>') + '</td>'
-            + '<td>' + (ed ? '<button type="button" class="gt-x" title="Xoá dòng (Ctrl+Delete)">✕</button>' : '') + '</td></tr>';
-    }
-    function render(focusNew) {
-        var $b = $w.find('.gt-lines').empty();
-        lines.forEach(function (l, i) { $b.append(rowHtml(l, i)); });
-        if (editable()) {
-            $b.append('<tr class="gt-new"><td class="gt-txt text-center text-muted">*</td><td colspan="2"><input class="gt-code-in" placeholder="Gõ mã hàng / tên / mã vạch…" autocomplete="off"></td><td colspan="8"></td></tr>');
-            if (focusNew) $b.find('.gt-code-in').focus();
-        }
+    function render() {
+        var $b = $w.find('.gt-lines').empty(), ed = editable(), kx = esc($w.find('.gt-from-zone').val() || ''), kn = esc($w.find('.gt-to-zone').val() || '');
+        if (!lines.length) $b.append('<tr><td colspan="11" class="text-center text-muted" style="height:60px">' + (ed ? 'Chưa có hàng — gõ mã hàng ở ô "Mã hàng" phía trên rồi Enter.' : 'Phiếu không có dòng hàng.') + '</td></tr>');
+        lines.forEach(function (l, i) {
+            var rq = '';
+            if (mode === 'receive') rq = '<input class="text-end gt-r" inputmode="decimal" value="' + esc(recv(l)) + '">';
+            else if (loaded && +loaded.import_status === 1) rq = fmt(recv(l));
+            $b.append('<tr data-i="' + i + '"><td class="text-center text-muted">' + (i + 1) + '</td><td>' + kx + '</td><td>' + kn + '</td>'
+                + '<td class="font-monospace">' + esc(l.sku) + '</td><td>' + esc(l.product_name || '') + '</td><td>' + esc(l.unit_name || '') + '</td>'
+                + '<td class="text-end text-muted">' + (l.stock === undefined ? '' : fmt(l.stock)) + '</td>'
+                + (ed ? '<td class="ed"><input class="text-end gt-q" inputmode="decimal" value="' + esc(l.quantity) + '"></td>' : '<td class="text-end">' + fmt(l.quantity) + '</td>')
+                + (mode === 'receive' ? '<td class="ed">' + rq + '</td>' : '<td class="text-end">' + rq + '</td>')
+                + (ed ? '<td class="ed"><input class="gt-n" value="' + esc(l.note || '') + '"></td>' : '<td>' + esc(l.note || '') + '</td>')
+                + '<td class="text-center">' + (ed ? '<button type="button" class="gt-x" title="Xoá dòng (Ctrl+Delete)">✕</button>' : '') + '</td></tr>');
+        });
         totals();
     }
     function addProduct(p, qty) {
@@ -145,30 +164,23 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         lines.push({ product_id: p.product_id, sku: p.sku, product_name: p.name, unit_name: p.unit, quantity: qty || 1, price: p.price, tax_percent: p.tax, stock: p.stock, note: '' });
         return lines.length - 1;
     }
-    function focusQty(i) { var $i = $w.find('.gt-lines tr[data-i="' + i + '"] .gt-q'); $i.focus().select(); }
+    function focusQty(i) { $w.find('.gt-lines tr[data-i="' + i + '"] .gt-q').focus().select(); }
 
-    // gợi ý mã hàng
-    var $sg = $w.find('.gt-sugg'), sugg = [], sel = -1, timer = null, lastQ = '';
-    function hideSugg() { $sg.hide(); sugg = []; sel = -1; }
-    function showSugg($inp, items) {
+    // ô Mã hàng + gợi ý
+    var $in = $w.find('.gt-code-in'), $sg = $w.find('.gt-sugg'), sugg = [], sel = -1, timer = null, lastQ = '';
+    function hideSugg() { $sg.addClass('gt-hide'); sugg = []; sel = -1; }
+    function showSugg(items) {
         sugg = items; sel = items.length ? 0 : -1;
-        if (!items.length) { $sg.html('<div class="text-muted">Không thấy mã hàng</div>'); }
-        else $sg.html(items.map(function (p, k) { return '<div data-k="' + k + '" class="' + (k === 0 ? 'on' : '') + '"><b class="font-monospace">' + esc(p.sku) + '</b> ' + esc(p.name) + '<small>tồn ' + fmt(p.stock) + ' ' + esc(p.unit || '') + '</small></div>'; }).join(''));
-        var o = $inp.offset(), wo = $w.offset();
-        $sg.css({ left: o.left - wo.left, top: o.top - wo.top + $inp.outerHeight() }).show();
+        $sg.html(items.length ? items.map(function (p, k) { return '<div data-k="' + k + '" class="' + (k === 0 ? 'on' : '') + '"><b class="font-monospace">' + esc(p.sku) + '</b> ' + esc(p.name) + '<small>tồn ' + fmt(p.stock) + ' ' + esc(p.unit || '') + '</small></div>'; }).join('') : '<div class="text-muted">Không thấy mã hàng</div>');
+        $sg.css({ left: $in.position().left, top: $in.position().top + $in.outerHeight() + 2 }).removeClass('gt-hide');
     }
     function search(q) { return ajax('products', { search: q }).then(function (r) { return r.success ? r.data.items : []; }); }
-    function pick(p) {
-        hideSugg();
-        var i = addProduct(p, 1);
-        render(false); focusQty(i);
-    }
-    $w.on('input', '.gt-code-in', function () {
-        var $i = $(this), q = this.value.trim(); clearTimeout(timer);
+    function pick(p) { hideSugg(); $in.val(''); var i = addProduct(p, 1); render(); focusQty(i); }
+    $in.on('input', function () {
+        var q = this.value.trim(); clearTimeout(timer);
         if (q.length < 2) return hideSugg();
-        timer = setTimeout(function () { lastQ = q; search(q).then(function (items) { if (lastQ === q) showSugg($i, items); }); }, 200);
-    }).on('keydown', '.gt-code-in', function (e) {
-        var $i = $(this);
+        timer = setTimeout(function () { lastQ = q; search(q).then(function (items) { if (lastQ === q) showSugg(items); }); }, 200);
+    }).on('keydown', function (e) {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             if (!sugg.length) return; e.preventDefault();
             sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + sugg.length) % sugg.length;
@@ -177,33 +189,34 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             e.preventDefault();
             var q = this.value.trim(); if (!q) return;
             clearTimeout(timer);
+            if (sugg.length && sel >= 0 && lastQ === q) return pick(sugg[sel]);
             search(q).then(function (items) {
                 var exact = items.find(function (p) { return String(p.sku).toUpperCase() === q.toUpperCase() || String(p.barcode) === q; });
-                var chosen = exact || (sugg.length && sel >= 0 ? sugg[sel] : null) || (items.length === 1 ? items[0] : null);
-                if (chosen) pick(chosen); else showSugg($i, items);
+                if (exact || items.length === 1) pick(exact || items[0]); else { lastQ = q; showSugg(items); }
             });
         } else if (e.key === 'Escape') { hideSugg(); }
-    }).on('paste', '.gt-code-in', function (e) {
-        // Dán từ Excel: mỗi dòng "mã hàng<Tab>số lượng" (số lượng có thể bỏ trống = 1)
+    }).on('paste', function (e) {
+        // Dán từ Excel: mỗi dòng "mã hàng<Tab>số lượng" (bỏ trống số lượng = 1)
         var text = (e.originalEvent.clipboardData || window.clipboardData).getData('text') || '';
         var rows = text.split(/\r?\n/).map(function (r) { return r.split('\t'); }).filter(function (c) { return c[0] && c[0].trim(); });
-        if (rows.length < 2 && !(rows[0] && rows[0].length > 1)) return; // dán 1 mã → để ô tự tìm
+        if (rows.length < 2 && !(rows[0] && rows[0].length > 1)) return;
         e.preventDefault(); hideSugg();
         var left = rows.length, miss = [];
         msg('warning', 'Đang thêm ' + left + ' dòng…');
         rows.forEach(function (c) {
-            var sku = c[0].trim(), qty = parseFloat(String(c[1] || '1').replace(/\./g, '').replace(',', '.')) || 1;
+            var sku = c[0].trim(), raw = String(c[1] || '1').trim();
+            var qty = parseFloat(/,\d{1,3}$/.test(raw) ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '')) || 1;
             search(sku).then(function (items) {
                 var p = items.find(function (x) { return String(x.sku).toUpperCase() === sku.toUpperCase() || String(x.barcode) === sku; });
                 if (p) addProduct(p, qty); else miss.push(sku);
             }).always(function () {
-                if (--left === 0) { render(true); msg(miss.length ? 'warning' : 'success', miss.length ? 'Không thấy mã: ' + miss.join(', ') : 'Đã thêm ' + rows.length + ' dòng.'); }
+                if (--left === 0) { render(); msg(miss.length ? 'warning' : 'success', miss.length ? 'Không thấy mã: ' + miss.join(', ') : 'Đã thêm ' + rows.length + ' dòng.'); $in.focus(); }
             });
         });
-    }).on('mousedown', '.gt-sugg div[data-k]', function (e) { e.preventDefault(); pick(sugg[+$(this).data('k')]); })
-      .on('blur', '.gt-code-in', function () { setTimeout(hideSugg, 150); });
+    }).on('blur', function () { setTimeout(hideSugg, 150); });
+    $sg.on('mousedown', 'div[data-k]', function (e) { e.preventDefault(); pick(sugg[+$(this).data('k')]); });
 
-    // sửa ô số lượng / ghi chú / số lượng nhập
+    // sửa ô trên lưới
     $w.on('input', '.gt-q,.gt-n,.gt-r', function () {
         var i = +$(this).closest('tr').data('i'), v = this.value;
         if ($(this).hasClass('gt-q')) lines[i].quantity = v;
@@ -211,31 +224,29 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         if ($(this).hasClass('gt-r')) lines[i].received = v;
         totals();
     }).on('keydown', '.gt-q,.gt-n,.gt-r', function (e) {
-        var $tr = $(this).closest('tr'), cls = '.' + this.className.split(' ').filter(function (c) { return /^gt-[qnr]$/.test(c); })[0];
-        if (e.key === 'Enter' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            var $next = $tr.next('tr').find(cls);
-            if ($next.length) $next.focus().select(); else $w.find('.gt-code-in').focus();
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault(); $tr.prev('tr').find(cls).focus().select();
-        } else if (e.key === 'Delete' && e.ctrlKey && editable()) {
-            e.preventDefault(); lines.splice(+$tr.data('i'), 1); render(true);
-        }
-    }).on('click', '.gt-x', function () { lines.splice(+$(this).closest('tr').data('i'), 1); render(true); });
-    $w.find('.gt-from-zone,.gt-to-zone').on('change', function () { render(false); });
+        var $tr = $(this).closest('tr'), cls = $(this).hasClass('gt-q') ? '.gt-q' : ($(this).hasClass('gt-n') ? '.gt-n' : '.gt-r');
+        if (e.key === 'Enter') { e.preventDefault(); if (cls === '.gt-q') { $in.focus(); return; } var $n = $tr.next('tr').find(cls); if ($n.length) $n.focus().select(); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); $tr.next('tr').find(cls).focus().select(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); $tr.prev('tr').find(cls).focus().select(); }
+        else if (e.key === 'Delete' && e.ctrlKey && editable()) { e.preventDefault(); lines.splice(+$tr.data('i'), 1); render(); $in.focus(); }
+    }).on('click', '.gt-x', function () { lines.splice(+$(this).closest('tr').data('i'), 1); render(); });
+    $w.find('.gt-from-zone,.gt-to-zone').on('change', render);
 
-    /* ---------------- chế độ / nút ---------------- */
+    /* ---------------- chế độ ---------------- */
     function applyMode() {
-        $w.find('.gt-hd').toggleClass('gt-ro', !editable());
-        // Phiếu mới: chỉ Ghi · Đóng. Phiếu đã ghi: thêm Xóa (bên xuất, chưa xác nhận), Xác nhận (bên nhập), Bỏ xác nhận, In.
-        $w.find('.gt-save').toggleClass('gt-hide', !editable());
-        $w.find('.gt-confirm').toggleClass('gt-hide', mode !== 'receive');
-        $w.find('.gt-unconfirm').toggleClass('gt-hide', !(loaded && +loaded.import_status === 1 && (canAll || +loaded.to_blog_id === cur)));
+        var ed = editable();
+        $w.find('.gt-hd, .gt-hd2').toggleClass('gt-ro', !ed);
+        $w.find('.gt-save, .gt-save-close').toggleClass('gt-hide', !ed);
         $w.find('.gt-delete').toggleClass('gt-hide', !(loaded && mode === 'edit'));
         $w.find('.gt-print').toggleClass('gt-hide', !loaded);
-        $w.find('.gt-from-site').prop('disabled', !(editable() && canAll && !loaded));
-        $w.find('.gt-help').toggle(editable());
-        render(editable() && !loaded);
+        $w.find('.gt-add, .gt-help').toggleClass('gt-hide', !ed);
+        $w.find('.gt-from-site').prop('disabled', !(ed && canAll && !loaded));
+        var confirmed = loaded && +loaded.import_status === 1;
+        var canUnconfirm = confirmed && (canAll || +loaded.to_blog_id === cur);
+        $w.find('.gt-approved').prop('checked', !!confirmed).prop('disabled', !(mode === 'receive' || canUnconfirm));
+        $w.find('.gt-approved-info').text(confirmed ? ('Đã xác nhận: ' + (loaded.import_approved_at || '')) : (mode === 'receive' ? 'Ghi Số lượng nhập trên lưới rồi tích để xác nhận.' : ''));
+        render();
+        if (ed && !loaded) $in.focus();
     }
 
     /* ---------------- danh mục ---------------- */
@@ -262,50 +273,56 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     }
     $w.find('.gt-from-site').on('change', function () {
         var b = +this.value, keepTo = $w.find('.gt-to-site').val();
-        loadZones(b, $w.find('.gt-from-zone'), '').always(function () { render(false); });
+        loadZones(b, $w.find('.gt-from-zone'), '').always(render);
         fillSites($w.find('.gt-to-site'), +keepTo === b ? '' : keepTo, b);
         if (+keepTo === b) zoneOptions($w.find('.gt-to-zone'), [], '', '— Chọn chi nhánh nhập trước —');
     });
     $w.find('.gt-to-site').on('change', function () {
         var b = +this.value;
-        if (b) loadZones(b, $w.find('.gt-to-zone'), loaded && +loaded.to_blog_id === b ? loaded.to_zone : '').always(function () { render(false); });
-        else { zoneOptions($w.find('.gt-to-zone'), [], '', '— Chọn chi nhánh nhập trước —'); render(false); }
+        if (b) loadZones(b, $w.find('.gt-to-zone'), loaded && +loaded.to_blog_id === b ? loaded.to_zone : '').always(render);
+        else { zoneOptions($w.find('.gt-to-zone'), [], '', '— Chọn chi nhánh nhập trước —'); render(); }
     });
 
     /* ---------------- ghi / thao tác ---------------- */
-    $w.find('.gt-save').on('click', function () {
+    function save(close) {
         if (!$w.find('.gt-to-site').val()) return msg('warning', 'Chưa chọn chi nhánh nhập');
         if ($w.find('.gt-to-site').val() === $w.find('.gt-from-site').val()) return msg('warning', 'Chi nhánh nhập trùng chi nhánh xuất');
         if (!lines.length) return msg('warning', 'Phiếu chưa có hàng');
-        $w.find('.gt-save').prop('disabled', true);
+        $w.find('.gt-save, .gt-save-close').prop('disabled', true);
         ajax('save', {
             transfer_id: id || 0, from_blog_id: $w.find('.gt-from-site').val(), reason_code: $w.find('.gt-reason').val() || '', to_blog_id: $w.find('.gt-to-site').val(),
             from_zone: $w.find('.gt-from-zone').val(), to_zone: $w.find('.gt-to-zone').val(),
             doc_date: $w.find('.gt-date').val(), transfer_type: loaded ? loaded.transfer_type : 1, note: $w.find('.gt-note').val(), approve: 1,
             items: JSON.stringify(lines.map(function (l) { return { product_id: l.product_id, sku: l.sku, product_name: l.product_name, unit_name: l.unit_name, quantity: l.quantity, price: l.price, tax_percent: l.tax_percent, note: l.note }; }))
         }).done(function (r) {
-            $w.find('.gt-save').prop('disabled', false);
+            $w.find('.gt-save, .gt-save-close').prop('disabled', false);
             if (!r.success) return msg('danger', r.data && r.data.message || 'Ghi thất bại');
-            window.location.href = formUrl + '&id=' + r.data.transfer_id + '&saved=1';
-        }).fail(function () { $w.find('.gt-save').prop('disabled', false); msg('danger', 'Lỗi mạng'); });
-    });
+            window.location.href = close ? listUrl : formUrl + '&id=' + r.data.transfer_id + '&saved=1';
+        }).fail(function () { $w.find('.gt-save, .gt-save-close').prop('disabled', false); msg('danger', 'Lỗi mạng'); });
+    }
+    $w.find('.gt-save').on('click', function () { save(false); });
+    $w.find('.gt-save-close').on('click', function () { save(true); });
+    $w.find('.gt-reload').on('click', function () { location.reload(); });
     function act(doVal, confirmText, extra) {
-        if (confirmText && !confirm(confirmText)) return;
+        if (confirmText && !confirm(confirmText)) { applyMode(); return; }
         ajax('action', $.extend({ transfer_id: id, do: doVal }, extra || {})).done(function (r) {
-            if (!r.success) return msg('danger', r.data && r.data.message || 'Thao tác thất bại');
+            if (!r.success) { msg('danger', r.data && r.data.message || 'Thao tác thất bại'); applyMode(); return; }
             if (doVal === 'delete') { window.location.href = listUrl; return; }
             window.location.href = formUrl + '&id=' + id + '&saved=1';
         });
     }
-    $w.find('.gt-confirm').on('click', function () {
-        var received = {};
-        lines.forEach(function (l) { received[l.item_id] = recv(l); });
-        act('approve_import', 'Xác nhận đã nhận đủ hàng? Tồn bên nhập cộng theo Số lượng nhập.', { received: JSON.stringify(received) });
+    $w.find('.gt-approved').on('change', function () {
+        if (this.checked) {
+            var received = {};
+            lines.forEach(function (l) { received[l.item_id] = recv(l); });
+            act('approve_import', 'Xác nhận đã nhận đủ hàng? Tồn bên nhập cộng theo Số lượng nhập.', { received: JSON.stringify(received) });
+        } else {
+            act('unapprove_import', 'Bỏ xác nhận? Tồn bên nhập trừ lại.');
+        }
     });
-    $w.find('.gt-unconfirm').on('click', function () { act('unapprove_import', 'Bỏ xác nhận? Tồn bên nhập trừ lại.'); });
     $w.find('.gt-delete').on('click', function () { act('delete', 'Xóa phiếu chuyển kho? Tồn hai bên tự trả lại.'); });
     $w.find('.gt-print').on('click', function () { window.print(); });
-    $(document).on('keydown.gtform', function (e) { if ((e.ctrlKey || e.metaKey) && e.key === 's' && editable()) { e.preventDefault(); $w.find('.gt-save').click(); } });
+    $(document).on('keydown.gtform', function (e) { if ((e.ctrlKey || e.metaKey) && e.key === 's' && editable()) { e.preventDefault(); save(false); } });
 
     /**
      * Điền sẵn từ PO / quét tồn (tgs_po_adjustment): sessionStorage tgs_poa_copy_items | tgs_poa_ticket_prefill
@@ -331,7 +348,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
                 var p = list.find(function (x) { return String(x.sku).toUpperCase() === sku.toUpperCase(); });
                 if (p) { var i = addProduct(p, +it.quantity || 1); lines[i].note = it.note || ''; }
                 else lines.push({ sku: sku, product_name: it.name || it.product_name || sku, unit_name: '', quantity: +it.quantity || 1, price: 0, tax_percent: 0, note: it.note || '' });
-            }).always(function () { if (--pending === 0) render(false); });
+            }).always(function () { if (--pending === 0) render(); });
         });
     }
 
@@ -355,7 +372,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             loaded = g.data;
             var t = loaded, confirmed = +t.import_status === 1 || (+t.to_blog_id <= 0 && +t.export_status === 1);
             $w.find('.gt-code').val(t.transfer_code); $w.find('.gt-date').val(t.doc_date); $w.find('.gt-note').val(t.note || ''); $w.find('.gt-src').val(t.source_label || '');
-            $w.find('.gt-status').val(+t.import_status === 2 ? 'Từ chối nhận' : (confirmed ? 'Đã xác nhận' : (+t.export_status === 1 ? 'Đang chờ xác nhận' : 'Nháp (chưa xuất)')));
+            $w.find('.gt-status').text(+t.import_status === 2 ? 'Từ chối nhận' : (confirmed ? 'Đã xác nhận' : (+t.export_status === 1 ? 'Đang chờ xác nhận' : 'Nháp (chưa xuất)'))).toggleClass('ok', confirmed);
             fillSites($w.find('.gt-from-site'), t.from_blog_id);
             fillSites($to, t.to_blog_id, +t.from_blog_id);
             reasonOptions(r.data.reasons, t.reason_code || '');
