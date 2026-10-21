@@ -97,8 +97,10 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     <div class="gt-detail">
         <div class="gt-detail-hd">
             <b>Chi tiết phiếu</b>
-            <span class="gt-add d-flex align-items-center gap-1"><span class="fw-semibold ms-2">Mã hàng</span><input class="form-control gt-code-in" style="width:280px" placeholder="Gõ mã / tên / mã vạch — Enter" autocomplete="off"></span>
-            <small class="text-muted ms-auto gt-help">Enter thêm dòng · ↑↓ chọn gợi ý · dán nhiều dòng "mã hàng ⇥ số lượng" từ Excel · Ctrl+Delete xoá dòng · Ctrl+S ghi</small>
+            <span class="gt-add d-flex align-items-center gap-1"><span class="fw-semibold ms-2">Mã hàng</span><input class="form-control gt-code-in" style="width:280px" placeholder="Gõ mã / tên / mã vạch — Enter" autocomplete="off">
+                <label class="btn btn-sm btn-outline-success mb-0 ms-2 py-0 px-2" style="font-size:12.5px;line-height:23px" title="Nhập chi tiết phiếu từ file Excel: Mã hàng | Số lượng | Ghi chú"><i class="bx bx-spreadsheet me-1"></i>Nhập Excel<input type="file" class="gt-xls d-none" accept=".xlsx,.xls,.csv"></label>
+                <a href="#" class="gt-xls-tpl ms-1" style="font-size:12px" title="Tải file Excel mẫu">File mẫu</a></span>
+            <small class="text-muted ms-auto gt-help">Enter thêm dòng · ↑↓ chọn gợi ý · dán / Nhập Excel nhiều dòng (Mã hàng, Số lượng, Ghi chú) · Ctrl+Delete xoá dòng · Ctrl+S ghi</small>
             <div class="gt-sugg gt-hide"></div>
         </div>
         <div class="gt-grid">
@@ -176,10 +178,11 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
      * Danh mục mặt hàng giữ tại trình duyệt (localStorage, kiểm phiên bản mỗi lần mở form) → tìm tức thì, không gọi máy chủ
      * mỗi phím. Chưa nạp xong thì tạm hỏi máy chủ.
      */
-    var CAT = null, CAT_KEY = 'tgs_gt_catalog_v1';
+    var CAT = null, CAT_KEY = 'tgs_gt_catalog_v1', catReady = $.Deferred();
     function norm(x) { return String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd'); }
     function buildCat(rows) {
         CAT = rows.map(function (x) { return { product_id: x[0], sku: x[1], name: x[2], unit: x[3], barcode: x[4], price: x[5], tax: x[6], k: norm(x[1] + ' ' + x[2] + ' ' + x[4]) }; });
+        catReady.resolve();
     }
     function loadCatalog() {
         var cached = null;
@@ -244,19 +247,80 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         var rows = text.split(/\r?\n/).map(function (r) { return r.split('\t'); }).filter(function (c) { return c[0] && c[0].trim(); });
         if (rows.length < 2 && !(rows[0] && rows[0].length > 1)) return;
         e.preventDefault(); hideSugg();
-        var left = rows.length, miss = [];
+        addRows(rows.map(function (c) { return { sku: c[0], qty: c[1], note: c[2] }; }));
+    }).on('blur', function () { setTimeout(hideSugg, 150); });
+
+    /** Số lượng từ ô Excel / chữ dán: 12 · "12" · "1.200" · "1,5" · "1,200.5" (trống = 1). */
+    function parseQty(v) {
+        if (typeof v === 'number') return v > 0 ? v : 1;
+        var raw = String(v == null ? '' : v).trim();
+        if (!raw) return 1;
+        var n = /,\d{1,3}$/.test(raw) && !/\.\d{1,3}$/.test(raw) ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '');
+        return parseFloat(n) || 1;
+    }
+    /** Thêm nhiều dòng [{sku, qty, note}] (dán / Nhập Excel): khớp theo mã hàng hoặc mã vạch; mã trùng cộng dồn số lượng. */
+    function addRows(rows) {
+        rows = rows.filter(function (r) { return String(r.sku == null ? '' : r.sku).trim(); });
+        if (!rows.length) return msg('warning', 'Không có dòng nào có mã hàng.');
+        if (!CAT) { msg('warning', 'Đang tải danh mục mặt hàng… sẽ tự thêm ' + rows.length + ' dòng khi xong.'); catReady.done(function () { addRows(rows); }); return; }
+        var left = rows.length, miss = [], added = 0;
         msg('warning', 'Đang thêm ' + left + ' dòng…');
-        rows.forEach(function (c) {
-            var sku = c[0].trim(), raw = String(c[1] || '1').trim();
-            var qty = parseFloat(/,\d{1,3}$/.test(raw) ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '')) || 1;
+        rows.forEach(function (r) {
+            var sku = String(r.sku).trim(), qty = parseQty(r.qty), note = String(r.note == null ? '' : r.note).trim();
             search(sku).then(function (items) {
                 var p = items.find(function (x) { return String(x.sku).toUpperCase() === sku.toUpperCase() || String(x.barcode) === sku; });
-                if (p) addProduct(p, qty); else miss.push(sku);
+                if (!p) { miss.push(sku); return; }
+                var i = addProduct(p, qty); added++;
+                if (note) lines[i].note = lines[i].note ? lines[i].note + '; ' + note : note;
             }).always(function () {
-                if (--left === 0) { render(); fetchStock(); msg(miss.length ? 'warning' : 'success', miss.length ? 'Không thấy mã: ' + miss.join(', ') : 'Đã thêm ' + rows.length + ' dòng.'); $in.focus(); }
+                if (--left > 0) return;
+                render(); fetchStock(); $in.focus();
+                msg(miss.length ? 'warning' : 'success', 'Đã thêm ' + added + ' dòng.' + (miss.length ? ' Không thấy ' + miss.length + ' mã: ' + miss.slice(0, 30).join(', ') + (miss.length > 30 ? '…' : '') : ''));
             });
         });
-    }).on('blur', function () { setTimeout(hideSugg, 150); });
+    }
+
+    /* ---------------- Nhập Excel ---------------- */
+    function withXlsx(cb) {
+        if (window.XLSX) return cb();
+        $.getScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js').done(cb).fail(function () { msg('danger', 'Không tải được thư viện đọc Excel.'); });
+    }
+    $w.find('.gt-xls').on('change', function () {
+        var f = this.files && this.files[0], input = this;
+        if (!f) return;
+        withXlsx(function () {
+            var fr = new FileReader();
+            fr.onload = function (ev) {
+                try {
+                    var wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                    var data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: true });
+                    // Tìm dòng tiêu đề trong 10 dòng đầu: cột Mã hàng / Số lượng / Ghi chú; không có thì A = mã, B = SL, C = ghi chú.
+                    var hi = -1, ci = 0, qi = 1, ni = 2;
+                    for (var r = 0; r < Math.min(10, data.length) && hi < 0; r++) {
+                        var cols = data[r].map(function (c) { return norm(c).trim(); });
+                        var c1 = cols.findIndex(function (c) { return /^(ma hang|ma sp|ma san pham|ma|sku|code|item code)$/.test(c); });
+                        if (c1 < 0) continue;
+                        hi = r; ci = c1;
+                        qi = cols.findIndex(function (c) { return /^(so luong|sl|qty|quantity|sl xuat|so luong xuat)$/.test(c); });
+                        ni = cols.findIndex(function (c) { return /^(ghi chu|note|dien giai)$/.test(c); });
+                    }
+                    var rows = data.slice(hi + 1).map(function (row) { return { sku: row[ci], qty: qi >= 0 ? row[qi] : 1, note: ni >= 0 ? row[ni] : '' }; });
+                    addRows(rows);
+                } catch (e) { msg('danger', 'Không đọc được file Excel: ' + e.message); }
+                input.value = '';
+            };
+            fr.readAsArrayBuffer(f);
+        });
+    });
+    $w.find('.gt-xls-tpl').on('click', function (e) {
+        e.preventDefault();
+        withXlsx(function () {
+            var ws = XLSX.utils.aoa_to_sheet([['Mã hàng', 'Số lượng', 'Ghi chú'], ['100861007', 10, ''], ['100861008', 5, 'ví dụ ghi chú']]);
+            ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 30 }];
+            var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Chi tiết phiếu');
+            XLSX.writeFile(wb, 'mau-phieu-chuyen-kho.xlsx');
+        });
+    });
     $sg.on('mousedown', 'div[data-k]', function (e) { e.preventDefault(); pick(sugg[+$(this).data('k')]); });
 
     // sửa ô trên lưới
