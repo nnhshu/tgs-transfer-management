@@ -344,13 +344,15 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         var ed = editable();
         $w.find('.gt-hd, .gt-hd2').toggleClass('gt-ro', !ed);
         $w.find('.gt-save, .gt-save-close').toggleClass('gt-hide', !ed);
-        $w.find('.gt-delete').toggleClass('gt-hide', !(loaded && mode === 'edit'));
+        $w.find('.gt-delete').toggleClass('gt-hide', !(loaded && mode === 'edit' && +loaded.import_status !== 1));
         $w.find('.gt-print').toggleClass('gt-hide', !loaded);
         $w.find('.gt-add, .gt-help').toggleClass('gt-hide', !ed);
         $w.find('.gt-from-site').prop('disabled', !(ed && canAll && !loaded));
         var confirmed = loaded && +loaded.import_status === 1;
         var canUnconfirm = confirmed && (canAll || +loaded.to_blog_id === cur);
-        $w.find('.gt-approved').prop('checked', !!confirmed).prop('disabled', !(mode === 'receive' || canUnconfirm));
+        // Tích được khi: bên nhập đang chờ nhận; hoặc kế toán xác nhận thay (phiếu đã xuất, có chi nhánh nhập); bỏ tích khi có quyền.
+        var canConfirm = mode === 'receive' || (loaded && !confirmed && canAll && +loaded.export_status === 1 && +loaded.to_blog_id > 0);
+        $w.find('.gt-approved').prop('checked', !!confirmed).prop('disabled', !(canConfirm || canUnconfirm));
         $w.find('.gt-approved-info').text(confirmed ? ('Đã xác nhận: ' + (loaded.import_approved_at || '')) : (mode === 'receive' ? 'Ghi Số lượng nhập trên lưới rồi tích để xác nhận.' : ''));
         render();
         if (ed && !loaded) $in.focus();
@@ -486,8 +488,10 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             reasonOptions(r.data.reasons, t.reason_code || '');
             lines = t.items.map(function (it) { return { item_id: +it.item_id, product_id: it.product_id, sku: it.sku, product_name: it.product_name, unit_name: it.unit_name, quantity: +it.quantity, received: it.received_qty == null ? '' : +it.received_qty, price: +it.price, tax_percent: +it.tax_percent, note: it.note }; });
             // Đang đứng ở chi nhánh nhập → nhận hàng; ở chi nhánh xuất (hoặc quản trị) → sửa; đã xác nhận / từ chối → chỉ xem.
-            if (confirmed || +t.import_status === 2) mode = 'view';
-            else if (+t.to_blog_id === cur && +t.export_status === 1) mode = 'receive';
+            // Chờ nhận + đang đứng ở chi nhánh nhập → nhận hàng; bên xuất / kế toán → sửa được (cả phiếu đã xác nhận: tồn hai bên tự
+            // tính lại theo số mới); bị từ chối hoặc không có quyền → chỉ xem.
+            if (+t.import_status === 2) mode = 'view';
+            else if (!confirmed && +t.to_blog_id === cur && +t.export_status === 1) mode = 'receive';
             else if (+t.from_blog_id === cur || canAll) mode = 'edit';
             else mode = 'view';
             $.when(loadZones(+t.from_blog_id, $w.find('.gt-from-zone'), t.from_zone), +t.to_blog_id > 0 ? loadZones(+t.to_blog_id, $w.find('.gt-to-zone'), t.to_zone) : zoneOptions($w.find('.gt-to-zone'), [], t.to_zone)).always(function () { applyMode(); if (mode === 'edit') fetchStock(); });
