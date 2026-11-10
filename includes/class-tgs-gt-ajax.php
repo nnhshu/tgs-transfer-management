@@ -188,7 +188,7 @@ class TGS_GT_Ajax
 
     /**
      * Gợi ý lô (10/11/2026): {items: [{sku, qty}]} của chi nhánh / phân kho xuất → mỗi mã [{lotNo, expDate, purchaseName,
-     * available, take}] + shortage. Lô do phần mềm kế toán giữ (tồn theo lô); thứ tự đúng như phần mềm kế toán tự chọn khi dòng
+     * warehouse, available, take}] + shortage. Chỉ lô đang nằm ở phân kho xuất (trống = kho mặc định). Lô do phần mềm kế toán giữ (tồn theo lô); thứ tự đúng như phần mềm kế toán tự chọn khi dòng
      * để trống lô: hạn dùng sớm trước, cùng hạn thì nhập trước. Người lập sửa được; dòng để trống lô thì phần mềm kế toán tự chọn.
      */
     public static function lots()
@@ -215,10 +215,9 @@ class TGS_GT_Ajax
             $branch = (string) TGS_Acc_Source::shop_code($blog);
         }
         $q = ['branchCode' => $branch, 'items' => implode(',', $parts)];
-        $zone = trim((string) self::post('zone'));
-        if ($zone !== '') {
-            $q['warehouse'] = $zone;
-        }
+        // Lô quản lý theo từng phân kho (10/11/2026): luôn gửi phân kho xuất; để trống = kho mặc định của chi nhánh
+        // (đúng kho phần mềm kế toán sẽ xuất khi nhận phiếu), không gợi ý lô đang nằm ở kho khác.
+        $q['warehouse'] = trim((string) self::post('zone'));
         $date = (string) self::post('date');
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             $q['date'] = $date;

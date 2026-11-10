@@ -352,14 +352,14 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
                 picks.forEach(function (x, k) {
                     var n = k === 0 ? l : $.extend({}, l, { item_id: undefined, note: '' });
                     n.quantity = x.take; n.lot_no = x.lotNo || ''; n.exp_date = x.expDate || '';
-                    n.lot_hint = 'Tên lúc mua: ' + (x.purchaseName || '') + ' · tồn lô ' + fmt(x.available);
+                    n.lot_hint = 'Tên lúc mua: ' + (x.purchaseName || '') + ' · tồn lô ' + fmt(x.available) + (x.warehouse ? ' ở kho ' + x.warehouse : '');
                     out.push(n);
                 });
                 if (picks.length > 1) split++;
                 if (s.shortage > 0) { out.push($.extend({}, l, { item_id: undefined, note: 'Thiếu tồn lô — để trống lô', quantity: s.shortage, lot_no: '', exp_date: '', lot_hint: '' })); short++; }
             });
             lines = out; render();
-            msg('success', 'Đã gợi ý lô hạn dùng sớm trước' + (split ? ' · ' + split + ' dòng tách theo lô' : '') + (short ? ' · ' + short + ' dòng thiếu tồn lô để trống (phần mềm kế toán tự chọn)' : '') + '. Sửa được trước khi ghi.');
+            msg('success', 'Đã gợi ý lô hạn dùng sớm trước ở ' + (r.data && r.data[0] && r.data[0].lots && r.data[0].lots[0] && r.data[0].lots[0].warehouse ? 'kho ' + r.data[0].lots[0].warehouse : 'phân kho xuất') + (split ? ' · ' + split + ' dòng tách theo lô' : '') + (short ? ' · ' + short + ' dòng thiếu tồn lô để trống (phần mềm kế toán tự chọn)' : '') + '. Sửa được trước khi ghi.');
         }).fail(function () { $b.prop('disabled', false); msg('danger', 'Không gọi được gợi ý lô'); });
     });
 
