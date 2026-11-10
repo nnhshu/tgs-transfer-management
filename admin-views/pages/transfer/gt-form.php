@@ -101,7 +101,8 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             <b>Chi tiết phiếu</b>
             <span class="gt-add d-flex align-items-center gap-1"><span class="fw-semibold ms-2">Mã hàng</span><input class="form-control gt-code-in" style="width:280px" placeholder="Gõ mã / tên / mã vạch — Enter" autocomplete="off">
                 <label class="btn btn-sm btn-outline-success mb-0 ms-2 py-0 px-2" style="font-size:12.5px;line-height:23px" title="Nhập chi tiết phiếu từ file Excel: Mã hàng | Số lượng | Ghi chú"><i class="bx bx-spreadsheet me-1"></i>Nhập Excel<input type="file" class="gt-xls d-none" accept=".xlsx,.xls,.csv"></label>
-                <a href="#" class="gt-xls-tpl ms-1" style="font-size:12px" title="Tải file Excel mẫu">File mẫu</a></span>
+                <a href="#" class="gt-xls-tpl ms-1" style="font-size:12px" title="Tải file Excel mẫu">File mẫu</a>
+                <button type="button" class="btn btn-sm btn-outline-primary mb-0 ms-2 py-0 px-2 gt-lot-suggest" style="font-size:12.5px;line-height:23px" title="Điền lô cho các dòng chưa có lô: hạn dùng sớm trước, theo tồn lô của phần mềm kế toán (một dòng lấy từ nhiều lô thì tách dòng). Sửa được; dòng để trống lô thì phần mềm kế toán tự chọn lô hạn sớm trước."><i class="bx bx-layer me-1"></i>Gợi ý lô</button></span>
             <small class="text-muted ms-auto gt-help">Enter thêm dòng · ↑↓ chọn gợi ý · dán / Nhập Excel nhiều dòng (Mã hàng, Số lượng, Ghi chú) · Ctrl+Delete xoá dòng · Ctrl+S ghi</small>
             <div class="gt-sugg gt-hide"></div>
         </div>
@@ -109,10 +110,10 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             <table data-ds-no-grid data-ds-no-filter data-ds-no-colcfg data-ds-no-export data-ds-no-resize>
                 <thead><tr>
                     <th style="width:36px">#</th><th style="width:80px">Kho xuất</th><th style="width:80px">Kho nhập</th><th style="width:130px">Mã hàng</th><th>Tên hàng</th>
-                    <th style="width:60px">ĐVT</th><th style="width:70px" class="text-end">Tồn</th><th style="width:90px" class="text-end">Số lượng</th><th style="width:100px" class="text-end">Số lượng nhập</th><th style="width:180px">Ghi chú</th><th style="width:26px"></th>
+                    <th style="width:60px">ĐVT</th><th style="width:70px" class="text-end">Tồn</th><th style="width:110px" title="Số lô của nhà cung cấp — bấm Gợi ý lô để điền; để trống thì phần mềm kế toán tự chọn lô hạn sớm trước">Số lô</th><th style="width:118px" title="Hạn dùng của lô">Hạn dùng</th><th style="width:90px" class="text-end">Số lượng</th><th style="width:100px" class="text-end">Số lượng nhập</th><th style="width:180px">Ghi chú</th><th style="width:26px"></th>
                 </tr></thead>
                 <tbody class="gt-lines"></tbody>
-                <tfoot><tr><td class="text-center gt-tcount">0</td><td colspan="6" class="text-end">Tổng</td><td class="text-end gt-tqty">0</td><td class="text-end gt-trecv"></td><td colspan="2"></td></tr></tfoot>
+                <tfoot><tr><td class="text-center gt-tcount">0</td><td colspan="8" class="text-end">Tổng</td><td class="text-end gt-tqty">0</td><td class="text-end gt-trecv"></td><td colspan="2"></td></tr></tfoot>
             </table>
         </div>
     </div>
@@ -145,7 +146,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     }
     function render() {
         var $b = $w.find('.gt-lines').empty(), ed = editable(), kx = esc($w.find('.gt-from-zone').val() || ''), kn = esc($w.find('.gt-to-zone').val() || '');
-        if (!lines.length) $b.append('<tr><td colspan="11" class="text-center text-muted" style="height:60px">' + (ed ? 'Chưa có hàng — gõ mã hàng ở ô "Mã hàng" phía trên rồi Enter.' : 'Phiếu không có dòng hàng.') + '</td></tr>');
+        if (!lines.length) $b.append('<tr><td colspan="13" class="text-center text-muted" style="height:60px">' + (ed ? 'Chưa có hàng — gõ mã hàng ở ô "Mã hàng" phía trên rồi Enter.' : 'Phiếu không có dòng hàng.') + '</td></tr>');
         lines.forEach(function (l, i) {
             var rq = '';
             if (mode === 'receive') rq = '<input class="text-end gt-r" inputmode="decimal" value="' + esc(recv(l)) + '">';
@@ -153,6 +154,8 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             $b.append('<tr data-i="' + i + '"><td class="text-center text-muted">' + (i + 1) + '</td><td>' + kx + '</td><td>' + kn + '</td>'
                 + '<td class="font-monospace">' + esc(l.sku) + '</td><td>' + esc(l.product_name || '') + '</td><td>' + esc(l.unit_name || '') + '</td>'
                 + '<td class="text-end text-muted">' + (l.stock === undefined ? '' : fmt(l.stock)) + '</td>'
+                + (ed ? '<td class="ed"><input class="gt-lot" value="' + esc(l.lot_no || '') + '" placeholder="tự chọn"' + (l.lot_hint ? ' title="' + esc(l.lot_hint) + '"' : '') + '></td><td class="ed"><input type="date" class="gt-exp" value="' + esc(l.exp_date || '') + '"></td>'
+                    : '<td class="font-monospace">' + esc(l.lot_no || '') + '</td><td>' + esc(l.exp_date ? l.exp_date.split('-').reverse().join('/') : '') + '</td>')
                 + (ed ? '<td class="ed"><input class="text-end gt-q" inputmode="decimal" value="' + esc(l.quantity) + '"></td>' : '<td class="text-end">' + fmt(l.quantity) + '</td>')
                 + (mode === 'receive' ? '<td class="ed">' + rq + '</td>' : '<td class="text-end">' + rq + '</td>')
                 + (ed ? '<td class="ed"><input class="gt-n" value="' + esc(l.note || '') + '"></td>' : '<td>' + esc(l.note || '') + '</td>')
@@ -161,7 +164,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
         totals();
     }
     function addProduct(p, qty) {
-        var ex = lines.find(function (l) { return String(l.sku).toUpperCase() === String(p.sku).toUpperCase(); });
+        var ex = lines.find(function (l) { return String(l.sku).toUpperCase() === String(p.sku).toUpperCase() && !l.lot_no; });
         if (ex) { ex.quantity = (+ex.quantity || 0) + (qty || 1); return lines.indexOf(ex); }
         lines.push({ product_id: p.product_id, sku: p.sku, product_name: p.name, unit_name: p.unit, quantity: qty || 1, price: p.price, tax_percent: p.tax, stock: p.stock, note: '' });
         return lines.length - 1;
@@ -326,6 +329,40 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
     $sg.on('mousedown', 'div[data-k]', function (e) { e.preventDefault(); pick(sugg[+$(this).data('k')]); });
 
     // sửa ô trên lưới
+    $w.on('input change', '.gt-lot,.gt-exp', function () {
+        var i = +$(this).closest('tr').data('i');
+        if ($(this).hasClass('gt-lot')) lines[i].lot_no = this.value.trim();
+        else lines[i].exp_date = this.value;
+    });
+    /* Gợi ý lô: dòng chưa có lô → lô hạn sớm trước theo tồn lô của phần mềm kế toán; một dòng nhiều lô thì tách dòng. */
+    $w.on('click', '.gt-lot-suggest', function () {
+        var need = lines.filter(function (l) { return !l.lot_no && +l.quantity > 0; });
+        if (!need.length) return msg('warning', 'Các dòng đã có lô (hoặc chưa có số lượng).');
+        var $b = $(this).prop('disabled', true);
+        ajax('lots', { blog_id: $w.find('.gt-from-site').val() || cur, zone: $w.find('.gt-from-zone').val() || '', date: $w.find('.gt-date').val() || '',
+            items: JSON.stringify(need.map(function (l) { return { sku: l.sku, qty: +l.quantity }; })) }).done(function (r) {
+            $b.prop('disabled', false);
+            if (!r.success) return msg('warning', (r.data && r.data.message) || 'Không lấy được gợi ý lô');
+            var bySku = {}, split = 0, short = 0, out = [];
+            (r.data || []).forEach(function (s) { (bySku[s.sku] = bySku[s.sku] || []).push(s); });
+            lines.forEach(function (l) {
+                if (l.lot_no || !(+l.quantity > 0) || !bySku[l.sku] || !bySku[l.sku].length) { out.push(l); return; }
+                var s = bySku[l.sku].shift(), picks = (s.lots || []).filter(function (x) { return x.take > 0; });
+                if (!picks.length) { out.push(l); short++; return; }
+                picks.forEach(function (x, k) {
+                    var n = k === 0 ? l : $.extend({}, l, { item_id: undefined, note: '' });
+                    n.quantity = x.take; n.lot_no = x.lotNo || ''; n.exp_date = x.expDate || '';
+                    n.lot_hint = 'Tên lúc mua: ' + (x.purchaseName || '') + ' · tồn lô ' + fmt(x.available);
+                    out.push(n);
+                });
+                if (picks.length > 1) split++;
+                if (s.shortage > 0) { out.push($.extend({}, l, { item_id: undefined, note: 'Thiếu tồn lô — để trống lô', quantity: s.shortage, lot_no: '', exp_date: '', lot_hint: '' })); short++; }
+            });
+            lines = out; render();
+            msg('success', 'Đã gợi ý lô hạn dùng sớm trước' + (split ? ' · ' + split + ' dòng tách theo lô' : '') + (short ? ' · ' + short + ' dòng thiếu tồn lô để trống (phần mềm kế toán tự chọn)' : '') + '. Sửa được trước khi ghi.');
+        }).fail(function () { $b.prop('disabled', false); msg('danger', 'Không gọi được gợi ý lô'); });
+    });
+
     $w.on('input', '.gt-q,.gt-n,.gt-r', function () {
         var i = +$(this).closest('tr').data('i'), v = this.value;
         if ($(this).hasClass('gt-q')) lines[i].quantity = v;
@@ -406,7 +443,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             transfer_id: id || 0, from_blog_id: $w.find('.gt-from-site').val(), reason_code: $w.find('.gt-reason').val() || '', to_blog_id: $w.find('.gt-to-site').val(),
             from_zone: $w.find('.gt-from-zone').val(), to_zone: $w.find('.gt-to-zone').val(),
             doc_date: $w.find('.gt-date').val(), transfer_type: loaded ? loaded.transfer_type : 1, note: $w.find('.gt-note').val(), approve: 1,
-            items: JSON.stringify(lines.map(function (l) { return { product_id: l.product_id, sku: l.sku, product_name: l.product_name, unit_name: l.unit_name, quantity: l.quantity, price: l.price, tax_percent: l.tax_percent, note: l.note }; }))
+            items: JSON.stringify(lines.map(function (l) { return { product_id: l.product_id, sku: l.sku, product_name: l.product_name, unit_name: l.unit_name, quantity: l.quantity, price: l.price, tax_percent: l.tax_percent, note: l.note, lot_no: l.lot_no || '', exp_date: l.exp_date || '' }; }))
         }).done(function (r) {
             $w.find('.gt-save, .gt-save-close').prop('disabled', false);
             if (!r.success) return msg('danger', r.data && r.data.message || 'Ghi thất bại');
@@ -492,7 +529,7 @@ $gt_nonce = wp_create_nonce(TGS_GT_Ajax::NONCE);
             fillSites($w.find('.gt-from-site'), t.from_blog_id);
             fillSites($to, t.to_blog_id, +t.from_blog_id);
             reasonOptions(r.data.reasons, t.reason_code || '');
-            lines = t.items.map(function (it) { return { item_id: +it.item_id, product_id: it.product_id, sku: it.sku, product_name: it.product_name, unit_name: it.unit_name, quantity: +it.quantity, received: it.received_qty == null ? '' : +it.received_qty, price: +it.price, tax_percent: +it.tax_percent, note: it.note }; });
+            lines = t.items.map(function (it) { return { item_id: +it.item_id, product_id: it.product_id, sku: it.sku, product_name: it.product_name, unit_name: it.unit_name, quantity: +it.quantity, received: it.received_qty == null ? '' : +it.received_qty, price: +it.price, tax_percent: +it.tax_percent, note: it.note, lot_no: it.lot_no || '', exp_date: it.exp_date || '' }; });
             // Đang đứng ở chi nhánh nhập → nhận hàng; ở chi nhánh xuất (hoặc quản trị) → sửa; đã xác nhận / từ chối → chỉ xem.
             // Chờ nhận + đang đứng ở chi nhánh nhập → nhận hàng; bên xuất / kế toán → sửa được (cả phiếu đã xác nhận: tồn hai bên tự
             // tính lại theo số mới); bị từ chối hoặc không có quyền → chỉ xem.

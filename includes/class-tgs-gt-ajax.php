@@ -9,6 +9,7 @@
  *   tgs_gt_action     approve_export · unapprove_export · approve_import · unapprove_import · reject · delete
  *   tgs_gt_htlist     màn "Phiếu chuyển kho": trạng thái (chờ xác nhận / đã xác nhận / tất cả), từ – đến, chi nhánh, tìm nhanh
  *   tgs_gt_report     "Báo cáo chuyển kho nội bộ": chi tiết (mode=detail) / nhóm theo mặt hàng (mode=item)
+ *   tgs_gt_lots       gợi ý lô cho các dòng (hạn dùng sớm trước, theo tồn lô của phần mềm kế toán — /api/v1/lots/suggest)
  * Quyền: bên ĐI sửa / xoá / duyệt xuất, bên ĐẾN duyệt nhận / từ chối. Quản trị của website đang đứng (kế toán chi nhánh) và
  * quản trị mạng lập / thao tác được phiếu cho MỌI chi nhánh — không phải vào từng website.
  * Lý do chuyển kho: danh mục lý do của phần mềm kế toán (/api/v1/posting/reasons, nhớ 6 giờ), không gọi được thì dùng danh
@@ -24,7 +25,7 @@ class TGS_GT_Ajax
 
     public static function init()
     {
-        foreach (['options', 'products', 'save', 'get', 'list', 'action', 'htlist', 'report', 'catalog', 'stock'] as $a) {
+        foreach (['options', 'products', 'save', 'get', 'list', 'action', 'htlist', 'report', 'catalog', 'stock', 'lots'] as $a) {
             add_action('wp_ajax_tgs_gt_' . $a, [__CLASS__, $a]);
         }
     }
@@ -183,6 +184,50 @@ class TGS_GT_Ajax
             }
         }
         wp_send_json_success($out);
+    }
+
+    /**
+     * Gợi ý lô (10/11/2026): {items: [{sku, qty}]} của chi nhánh / phân kho xuất → mỗi mã [{lotNo, expDate, purchaseName,
+     * available, take}] + shortage. Lô do phần mềm kế toán giữ (tồn theo lô); thứ tự đúng như phần mềm kế toán tự chọn khi dòng
+     * để trống lô: hạn dùng sớm trước, cùng hạn thì nhập trước. Người lập sửa được; dòng để trống lô thì phần mềm kế toán tự chọn.
+     */
+    public static function lots()
+    {
+        self::guard();
+        if (!class_exists('TGS_Acc_Api_Client') || !class_exists('TGS_Acc_Config') || TGS_Acc_Config::url() === '' || TGS_Acc_Config::key() === '') {
+            wp_send_json_error(['message' => 'Chưa kết nối phần mềm kế toán — để trống lô, phần mềm kế toán tự chọn lô hạn sớm trước khi nhận phiếu.']);
+        }
+        $blog = (int) self::post('blog_id', get_current_blog_id()) ?: get_current_blog_id();
+        $items = (array) json_decode((string) self::post('items', '[]'), true);
+        $parts = [];
+        foreach (array_slice($items, 0, 300) as $it) {
+            $sku = trim((string) ($it['sku'] ?? ''));
+            $qty = (float) ($it['qty'] ?? 0);
+            if ($sku !== '' && $qty > 0 && strpos($sku, ',') === false) {
+                $parts[] = $sku . '*' . $qty;
+            }
+        }
+        if (!$parts) {
+            wp_send_json_success([]);
+        }
+        $branch = TGS_Global_Transfer::branch_name_of(TGS_Global_Transfer::branch_of_blog($blog));
+        if ($branch === '' && class_exists('TGS_Acc_Source')) {
+            $branch = (string) TGS_Acc_Source::shop_code($blog);
+        }
+        $q = ['branchCode' => $branch, 'items' => implode(',', $parts)];
+        $zone = trim((string) self::post('zone'));
+        if ($zone !== '') {
+            $q['warehouse'] = $zone;
+        }
+        $date = (string) self::post('date');
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            $q['date'] = $date;
+        }
+        $res = (new TGS_Acc_Api_Client())->get('/api/v1/lots/suggest', $q);
+        if (is_wp_error($res)) {
+            wp_send_json_error(['message' => 'Không lấy được gợi ý lô: ' . $res->get_error_message()]);
+        }
+        wp_send_json_success((array) ($res['data'] ?? []));
     }
 
     public static function save()

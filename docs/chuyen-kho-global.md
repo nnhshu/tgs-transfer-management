@@ -51,3 +51,11 @@ Chạy `tgs_shop_management/tools/migrate-transfer-to-global.php`. Mặc định
 - Phiếu chỉ có một đầu trở thành phiếu có đầu kia là ngoài hệ thống.
 - Xoá mềm phiếu cũ (phiếu cha và phiếu con).
 - Ảnh hưởng tồn của từng shop giữ nguyên.
+
+## Số lô trên dòng (10/11/2026)
+
+- Bảng dòng `wp_global_transfer_item` có thêm cột `lot_no` (DB 1.1.62) cạnh `exp_date`.
+- Form có cột **Số lô / Hạn dùng** và nút **Gợi ý lô** (AJAX `tgs_gt_lots` → `GET /api/v1/lots/suggest` của phần mềm kế toán): điền lô hạn dùng sớm trước theo tồn lô ở chi nhánh + phân kho xuất; một dòng nhiều lô thì tách dòng; thiếu tồn lô thì để trống.
+- **Có điền thì ưu tiên, để trống thì theo quy tắc**: dòng có số lô → phần mềm kế toán lấy đúng lô đó ở cả hai đầu; trống → tự chọn lô hạn sớm trước khi nhận phiếu.
+- Cầu nối (`TGS_Acc_Mapper::global_transfer`) gửi `lotNo`, `expDate` cho cả đầu xuất và đầu nhận.
+- Tổng quan lô hàng cho team: `tgs_shop_management/docs/lo-hang-xuyen-suot.md`.
